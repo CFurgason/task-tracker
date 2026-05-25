@@ -844,7 +844,12 @@
       } catch (error) {
         console.error(error);
         if (!csvUrl) throw error;
-        dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+
+        try {
+          dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+        } catch (fallbackError) {
+          throw new Error(`Google Sheet failed: ${error.message}. Fallback JSON failed: ${fallbackError.message}`);
+        }
       }
 
       rows = dashboardData.rows.filter(row => !dashboardConfig.excludedTasks.has(row.task));
@@ -1159,7 +1164,7 @@
     function pointsFor(series, valueKey, minValue, maxValue, chart) {
       const valueRange = maxValue - minValue || 1;
       return series.map((week, index) => {
-        const x = chart.left + (index / (series.length - 1)) * chart.width;
+        const x = chart.left + (series.length <= 1 ? chart.width / 2 : (index / (series.length - 1)) * chart.width);
         const y = chart.top + ((maxValue - week[valueKey]) / valueRange) * chart.height;
         return { x, y, week };
       });
@@ -1168,6 +1173,11 @@
     function renderWeekChart(data) {
       const chart = document.getElementById("weekChart");
       const series = buildWeeklySeries(data);
+      if (!series.length) {
+        chart.innerHTML = `<div class="empty-alerts">No weekly task volume is available for this selection.</div>`;
+        return;
+      }
+
       const callsMax = Math.max(...series.map(week => week.calls), 1);
       const changeValues = series.slice(1).map(week => week.change);
       const changeMin = Math.min(0, ...changeValues);
@@ -1182,7 +1192,7 @@
       const labelIndexes = [...new Set(series.map((week, index) => {
         if (series.length <= 7) return index;
         return Math.round(index * (series.length - 1) / 6);
-      }))];
+      }))].filter(index => callsPoints[index] && series[index]);
       const callTicks = [0, Math.round(callsMax / 2), callsMax];
       const changeTicks = [paddedChangeMin, 0, paddedChangeMax];
 
@@ -1406,7 +1416,7 @@
 
     loadDashboardData().catch(error => {
       console.error(error);
-      document.getElementById("asOfDate").textContent = "Dashboard data could not be loaded. Check the Google Sheet CSV link and published sharing settings.";
+      document.getElementById("asOfDate").textContent = `Dashboard data could not be loaded: ${error.message}`;
     });
     window.addEventListener("resize", syncWarningPanelHeight);
   </script>
