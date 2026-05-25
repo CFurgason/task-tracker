@@ -1,0 +1,1427 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Tracker</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5f6b7a;
+      --line: #d9e0e8;
+      --blue: #2563eb;
+      --green: #16805d;
+      --amber: #b7791f;
+      --amber-bg: #fff7e0;
+      --red: #b42318;
+      --red-bg: #fff0ee;
+      --gray-bg: #eef2f6;
+      --shadow: 0 10px 30px rgba(23, 32, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+    }
+
+    header {
+      background: #152238;
+      color: #ffffff;
+      padding: 22px 0;
+      border-bottom: 4px solid #2f7de1;
+    }
+
+    .header-row {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0 28px;
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-end;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.55rem, 2.6vw, 2.2rem);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .subhead {
+      margin: 8px 0 0;
+      color: #cbd7e6;
+      font-size: 0.98rem;
+    }
+
+    .date-pill {
+      color: #dbe7f5;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      padding: 9px 12px;
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .date-pill-main {
+      display: block;
+    }
+
+    .date-pill-refresh {
+      display: block;
+      margin-top: 3px;
+      color: #aebdd0;
+      font-size: 0.76rem;
+      line-height: 1.2;
+    }
+
+    main {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px 28px 36px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .control {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 13px 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .control-hidden {
+      display: none;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    select,
+    input[type="number"] {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 7px 9px;
+      color: var(--text);
+      background: #ffffff;
+    }
+
+    .trend-up {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .trend-down {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view-active {
+      display: block;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .panel-note {
+      color: var(--muted);
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .chart-body {
+      padding: 18px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 110px 1fr 54px;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 13px;
+      min-height: 28px;
+    }
+
+    .bar-label {
+      color: #334155;
+      font-size: 0.9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bar-track {
+      height: 14px;
+      border-radius: 999px;
+      background: var(--gray-bg);
+      overflow: hidden;
+    }
+
+    .bar {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--blue);
+      min-width: 3px;
+    }
+
+    .bar-value {
+      text-align: right;
+      font-weight: 700;
+      color: #26364d;
+    }
+
+    .line-chart {
+      display: grid;
+      gap: 12px;
+    }
+
+    .line-chart svg {
+      width: 100%;
+      height: auto;
+      min-height: 280px;
+      display: block;
+    }
+
+    .axis-label,
+    .tick-label {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+
+    .grid-line {
+      stroke: #e6ebf2;
+      stroke-width: 1;
+    }
+
+    .call-line {
+      fill: none;
+      stroke: #0f766e;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .change-line {
+      fill: none;
+      stroke: var(--amber);
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 6 5;
+    }
+
+    .call-point {
+      fill: #0f766e;
+      stroke: #ffffff;
+      stroke-width: 2;
+    }
+
+    .change-point {
+      fill: var(--amber);
+      stroke: #ffffff;
+      stroke-width: 2;
+    }
+
+    .point-value {
+      fill: #1f2937;
+      font-size: 11px;
+      font-weight: 700;
+      paint-order: stroke;
+      stroke: #ffffff;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+
+    .change-value {
+      fill: #7a5408;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend-swatch {
+      width: 22px;
+      height: 3px;
+      border-radius: 999px;
+      background: #0f766e;
+    }
+
+    .legend-swatch-change {
+      background: repeating-linear-gradient(
+        to right,
+        var(--amber) 0,
+        var(--amber) 7px,
+        transparent 7px,
+        transparent 12px
+      );
+    }
+
+    .alerts {
+      padding: 10px;
+      display: grid;
+      align-content: start;
+      gap: 7px;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .dashboard-grid .alerts {
+      flex: 1;
+      max-height: none;
+    }
+
+    .warning-panel {
+      height: auto;
+    }
+
+    .alert {
+      border-radius: 6px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+    }
+
+    .alert-red {
+      background: var(--red-bg);
+      border-color: #ffc8c2;
+      color: #7a271a;
+    }
+
+    .alert-special {
+      background: #fff0f6;
+      border-color: #ffadd2;
+      color: #861657;
+    }
+
+    .alert-amber {
+      background: var(--amber-bg);
+      border-color: #f8d88a;
+      color: #6f4e0d;
+    }
+
+    .alert-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 800;
+      margin-bottom: 3px;
+      font-size: 0.88rem;
+    }
+
+    .alert-meta {
+      font-size: 0.8rem;
+      line-height: 1.25;
+    }
+
+    .empty-alerts {
+      color: var(--muted);
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .all-shop-alert {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.8fr) minmax(320px, 1.2fr);
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+
+    .all-shop-alert-card {
+      background: var(--red-bg);
+      border: 1px solid #ffc8c2;
+      color: #7a271a;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .all-shop-alert-title {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.25;
+    }
+
+    .all-shop-alert-meta {
+      margin: 0;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .compact-line-chart {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .compact-line-chart .panel-head {
+      padding: 14px 16px;
+    }
+
+    .compact-line-chart .chart-body {
+      padding: 12px 16px 16px;
+    }
+
+    .compact-line-chart svg {
+      width: 100%;
+      height: auto;
+      min-height: 180px;
+      display: block;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    .urgent-groups {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+
+    .urgent-groups .panel {
+      align-self: start;
+    }
+
+    .urgent-groups table {
+      min-width: 0;
+    }
+
+    .urgent-groups th,
+    .urgent-groups td {
+      white-space: nowrap;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      font-size: 0.92rem;
+    }
+
+    th {
+      background: #f8fafc;
+      color: #475569;
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    tbody tr:hover {
+      background: #f8fbff;
+    }
+
+    .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge-ok {
+      color: #0f6b4b;
+      background: #e6f7ef;
+    }
+
+    .badge-amber {
+      color: #7a5408;
+      background: #fff1c7;
+    }
+
+    .badge-red {
+      color: #9f1d14;
+      background: #ffe1dc;
+    }
+
+    .badge-special {
+      color: #861657;
+      background: #ffd6e8;
+    }
+
+    @media (max-width: 980px) {
+      .controls,
+      .dashboard-grid,
+      .all-shop-alert,
+      .urgent-groups {
+        grid-template-columns: 1fr;
+      }
+
+      .header-row {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .date-pill {
+        white-space: normal;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .header-row,
+      main {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .bar-row {
+        grid-template-columns: 88px 1fr 46px;
+      }
+
+      .panel-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .panel-note {
+        white-space: normal;
+      }
+
+      .all-shop-alert {
+        grid-template-columns: 1fr;
+      }
+
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="header-row">
+        <div>
+          <h1>Task Tracker</h1>
+          <p class="subhead">Task and shop level monitoring.</p>
+        </div>
+        <div class="date-pill" id="asOfDate"></div>
+      </div>
+    </header>
+
+    <main>
+      <section class="controls" aria-label="Dashboard controls">
+        <div class="control">
+          <label for="viewSelector">Page or shop</label>
+          <select id="viewSelector">
+            <option value="urgentDrops" selected>Most urgent drops</option>
+          </select>
+        </div>
+        <div class="control" id="taskControl">
+          <label for="taskFilter">Task</label>
+          <select id="taskFilter">
+            <option value="All">All tasks</option>
+          </select>
+        </div>
+      </section>
+
+      <div id="storeDashboard" class="view">
+        <section class="dashboard-grid">
+          <article class="panel" id="trendPanel">
+            <div class="panel-head">
+              <h2 class="panel-title">Current CSV Call Trend</h2>
+              <span class="panel-note">Weekly calls with week-over-week change</span>
+            </div>
+            <div class="chart-body" id="weekChart"></div>
+          </article>
+
+          <article class="panel warning-panel" id="warningPanel">
+            <div class="panel-head">
+              <h2 class="panel-title">Active Warnings</h2>
+              <span class="panel-note" id="alertCount">0 alerts</span>
+            </div>
+            <div class="alerts" id="alerts"></div>
+          </article>
+        </section>
+
+        <section class="panel" style="margin-top: 18px;">
+          <div class="panel-head">
+            <h2 class="panel-title">Task and Shop Detail</h2>
+            <span class="panel-note">Color-coded by alert status</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Shop</th>
+                  <th>Task</th>
+                  <th class="num">Last 7 Days</th>
+                  <th class="num">Previous 4 Week Avg</th>
+                  <th class="num">% Change</th>
+                  <th class="num">Days Since Call</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="detailRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="urgentDrops" class="view view-active">
+        <section id="allShopAlert" aria-live="polite"></section>
+        <section class="urgent-groups" id="urgentGroups" aria-label="Most concerning call drops grouped by task"></section>
+      </div>
+    </main>
+  </div>
+
+  <script src="google-sheets-config.js"></script>
+  <script>
+    const dashboardConfig = {
+      googleSheetCsvUrl: new URLSearchParams(window.location.search).get("sheetCsv")
+        || (window.TASK_TRACKER_GOOGLE_SHEET_CSV_URL || ""),
+      fallbackJsonUrl: "task-tracker-data.json",
+      excludedShops: new Set(["Redwood General Tire"]),
+      excludedTasks: new Set(["Welcome New Customer", "Welcome New Vehicle"])
+    };
+
+    let dashboardData = null;
+    let rows = [];
+
+    const viewSelector = document.getElementById("viewSelector");
+    const taskFilter = document.getElementById("taskFilter");
+    const taskControl = document.getElementById("taskControl");
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let field = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (inQuotes) {
+          if (char === '"' && next === '"') {
+            field += '"';
+            i += 1;
+          } else if (char === '"') {
+            inQuotes = false;
+          } else {
+            field += char;
+          }
+          continue;
+        }
+
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          row.push(field);
+          field = "";
+        } else if (char === "\n" || char === "\r") {
+          if (char === "\r" && next === "\n") i += 1;
+          row.push(field);
+          if (row.some(value => value.trim() !== "")) rows.push(row);
+          row = [];
+          field = "";
+        } else {
+          field += char;
+        }
+      }
+
+      row.push(field);
+      if (row.some(value => value.trim() !== "")) rows.push(row);
+
+      const headers = rows.shift().map(header => header.trim());
+      return rows.map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] || ""])));
+    }
+
+    function parseTaskDate(value) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) return null;
+
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) {
+        return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+      }
+
+      const serial = Number(trimmed);
+      if (Number.isFinite(serial)) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        return new Date(excelEpoch.getTime() + serial * 86400000);
+      }
+
+      return null;
+    }
+
+    function isoDate(date) {
+      return date.toISOString().slice(0, 10);
+    }
+
+    function countInWindow(items, startDate, endDate) {
+      return items.filter(item => item.date >= startDate && item.date <= endDate).length;
+    }
+
+    function buildDashboardDataFromCsv(csvText) {
+      const taskRows = parseCsv(csvText)
+        .map(item => {
+          const shop = String(item["Shop Name"] || "").trim();
+          const task = String(item["Task Association"] || "").trim();
+          const date = parseTaskDate(item["Date/Time Stamp"]);
+          return { shop, task, date };
+        })
+        .filter(item => item.shop && item.task && item.date && !dashboardConfig.excludedShops.has(item.shop));
+
+      if (!taskRows.length) {
+        throw new Error("No usable task rows were found in the Google Sheet CSV.");
+      }
+
+      const minDate = new Date(Math.min(...taskRows.map(item => item.date.getTime())));
+      const maxDate = new Date(Math.max(...taskRows.map(item => item.date.getTime())));
+      const weekWindows = [];
+      let weekEnd = new Date(maxDate);
+
+      while (weekEnd >= minDate) {
+        let weekStart = new Date(weekEnd);
+        weekStart.setDate(weekStart.getDate() - 6);
+        if (weekStart < minDate) weekStart = new Date(minDate);
+        weekWindows.unshift({ start: weekStart, end: new Date(weekEnd) });
+        weekEnd.setDate(weekEnd.getDate() - 7);
+      }
+
+      const currentWindow = weekWindows[weekWindows.length - 1];
+      const previousWindow = weekWindows[weekWindows.length - 2] || null;
+      const previousFourWindows = weekWindows.slice(Math.max(0, weekWindows.length - 5), -1);
+      const groups = new Map();
+
+      taskRows.forEach(item => {
+        const key = `${item.shop}\u0000${item.task}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+      });
+
+      const groupedRows = [...groups.values()].map(group => {
+        const first = group[0];
+        const previousCounts = previousFourWindows.map(window => countInWindow(group, window.start, window.end));
+        const previousFourWeekAvg = previousCounts.length
+          ? previousCounts.reduce((sum, value) => sum + value, 0) / previousCounts.length
+          : 0;
+        const lastDate = new Date(Math.max(...group.map(item => item.date.getTime())));
+
+        return {
+          store: first.shop,
+          task: first.task,
+          current: countInWindow(group, currentWindow.start, currentWindow.end),
+          previous: previousWindow ? countInWindow(group, previousWindow.start, previousWindow.end) : 0,
+          previousFourWeekAvg: Math.round(previousFourWeekAvg * 100) / 100,
+          daysSinceCall: Math.round((maxDate - lastDate) / 86400000),
+          weekly: weekWindows.map(window => ({
+            label: window.end.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+            startDate: isoDate(window.start),
+            endDate: isoDate(window.end),
+            calls: countInWindow(group, window.start, window.end)
+          }))
+        };
+      });
+
+      return {
+        fromDate: isoDate(minDate),
+        asOfDate: isoDate(maxDate),
+        refreshedAt: new Date().toISOString(),
+        windowLabel: `Current Google Sheet dates: ${minDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} through ${maxDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`,
+        rows: groupedRows
+      };
+    }
+
+    async function fetchText(url) {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Could not load ${url}: ${response.status}`);
+      return response.text();
+    }
+
+    async function loadDashboardData() {
+      const csvUrl = dashboardConfig.googleSheetCsvUrl.trim();
+      document.getElementById("asOfDate").textContent = csvUrl ? "Loading Google Sheet data..." : "Loading dashboard data...";
+
+      try {
+        if (csvUrl) {
+          dashboardData = buildDashboardDataFromCsv(await fetchText(csvUrl));
+        } else {
+          dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+        }
+      } catch (error) {
+        console.error(error);
+        if (!csvUrl) throw error;
+        dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+      }
+
+      rows = dashboardData.rows.filter(row => !dashboardConfig.excludedTasks.has(row.task));
+      initializeControls();
+      renderDataDate();
+      render();
+    }
+
+    function initializeControls() {
+      viewSelector.innerHTML = '<option value="urgentDrops">Urgent Drops</option>';
+      taskFilter.innerHTML = '<option value="All">All Tasks</option>';
+      addOptions(viewSelector, uniqueValues("store"));
+      addOptions(taskFilter, uniqueValues("task"));
+
+      [viewSelector, taskFilter].forEach(control => {
+        control.addEventListener("input", render);
+        control.addEventListener("change", render);
+      });
+    }
+
+    function formatDashboardDate(dateText) {
+      return new Date(`${dateText}T00:00:00`).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      });
+    }
+
+    function renderDataDate() {
+      const asOfDateText = formatDashboardDate(dashboardData.asOfDate);
+      const fromDateText = dashboardData.fromDate && dashboardData.fromDate !== dashboardData.asOfDate
+        ? formatDashboardDate(dashboardData.fromDate)
+        : null;
+      const refreshedAtText = dashboardData.refreshedAt
+        ? new Date(dashboardData.refreshedAt).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit"
+          })
+        : null;
+
+      document.getElementById("asOfDate").innerHTML = `
+        <span class="date-pill-main">${fromDateText ? `Data from ${fromDateText} through ${asOfDateText}` : `Data through ${asOfDateText}`}</span>
+        ${refreshedAtText ? `<span class="date-pill-refresh">Last refreshed ${refreshedAtText}</span>` : ""}
+      `;
+    }
+
+    function uniqueValues(key) {
+      return [...new Set(rows.map(row => row[key]))].sort();
+    }
+
+    function addOptions(select, values) {
+      values.forEach(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      });
+    }
+    function selectedStore() {
+      return viewSelector.value === "urgentDrops" ? uniqueValues("store")[0] : viewSelector.value;
+    }
+
+    function isShopPage() {
+      return viewSelector.value !== "urgentDrops";
+    }
+
+    function selectedStoreRows() {
+      return rows.filter(row => row.store === selectedStore());
+    }
+
+    function filteredRows() {
+      return rows.filter(row => {
+        const storeMatch = row.store === selectedStore();
+        const taskMatch = taskFilter.value === "All" || row.task === taskFilter.value;
+        return storeMatch && taskMatch;
+      });
+    }
+
+    function sumBy(data, key, valueKey = "current") {
+      return data.reduce((acc, row) => {
+        acc[row[key]] = (acc[row[key]] || 0) + numericValue(row[valueKey]);
+        return acc;
+      }, {});
+    }
+
+    function numericValue(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : 0;
+    }
+
+    function formatNumber(value) {
+      return numericValue(value).toLocaleString();
+    }
+
+    function percentChange(current, previous) {
+      current = numericValue(current);
+      previous = numericValue(previous);
+      if (previous === 0 && current === 0) return 0;
+      if (previous === 0) return 100;
+      return ((current - previous) / previous) * 100;
+    }
+
+    function getStatus(row) {
+      const previousFourWeekAvg = previousFourWeekAverage(row);
+      const change = percentChange(row.current, previousFourWeekAvg);
+
+      if (change <= -51) {
+        return {
+          level: "red",
+          label: "Critical",
+          reason: row.task === "Next Day Satisfaction" && row.current === 0
+            ? "No Next Day Satisfaction calls in the last 7 days"
+            : "Volume is down at least 51% from the previous four-week average"
+        };
+      }
+
+      if (change <= -21) {
+        return {
+          level: "amber",
+          label: "Call Drop",
+          reason: "Volume is down 21% to 50% from the previous four-week average"
+        };
+      }
+
+      return {
+        level: "ok",
+        label: "On track",
+        reason: "Drop is not greater than 20%"
+      };
+    }
+
+    function getDropRows(data = rows) {
+      return data
+        .map(row => {
+          const previousFourWeekAvg = previousFourWeekAverage(row);
+          return {
+            ...row,
+            previousFourWeekAvg,
+            current: numericValue(row.current),
+            previous: numericValue(row.previous),
+            daysSinceCall: numericValue(row.daysSinceCall),
+            drop: previousFourWeekAvg - numericValue(row.current),
+            change: percentChange(row.current, previousFourWeekAvg)
+          };
+        })
+        .filter(row => row.change <= -21)
+        .sort((a, b) => {
+          const aStopped = a.current === 0 ? 1 : 0;
+          const bStopped = b.current === 0 ? 1 : 0;
+          return bStopped - aStopped || b.daysSinceCall - a.daysSinceCall || a.change - b.change || b.drop - a.drop;
+        });
+    }
+
+    function previousFourWeekAverage(row) {
+      return numericValue(row.previousFourWeekAvg);
+    }
+
+    function renderChart(elementId, totals, color = "var(--blue)") {
+      const chart = document.getElementById(elementId);
+      const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+      const max = Math.max(...entries.map(([, value]) => value), 1);
+
+      chart.innerHTML = entries.map(([label, value]) => `
+        <div class="bar-row">
+          <div class="bar-label" title="${label}">${label}</div>
+          <div class="bar-track">
+            <div class="bar" style="width: ${(value / max) * 100}%; background: ${color};"></div>
+          </div>
+          <div class="bar-value">${formatNumber(value)}</div>
+        </div>
+      `).join("");
+    }
+
+    function buildWeeklySeries(data) {
+      const totals = data.reduce((acc, row) => {
+        (row.weekly || []).forEach(week => {
+          acc[week.label] = (acc[week.label] || 0) + numericValue(week.calls);
+        });
+        return acc;
+      }, {});
+
+      const labels = data.find(row => Array.isArray(row.weekly))?.weekly.map(week => week.label) || [];
+      return labels.map(label => ({
+        label,
+        calls: totals[label] || 0,
+        change: 0
+      })).map((week, index, series) => {
+        if (index === 0) return week;
+        const previousCalls = series[index - 1].calls;
+        return {
+          ...week,
+          change: previousCalls === 0
+            ? (week.calls === 0 ? 0 : 100)
+            : ((week.calls - previousCalls) / previousCalls) * 100
+        };
+      });
+    }
+
+    function getAllShopDropAlert() {
+      const shopSummaries = uniqueValues("store").map(store => {
+        const shopRows = rows.filter(row => row.store === store);
+        const current = shopRows.reduce((total, row) => total + numericValue(row.current), 0);
+        const previousAverage = shopRows.reduce((total, row) => total + previousFourWeekAverage(row), 0);
+        const change = percentChange(current, previousAverage);
+
+        return { store, current, previousAverage, change };
+      }).filter(shop => shop.previousAverage > 0);
+
+      const droppedShops = shopSummaries.filter(shop => shop.change < -15);
+      const shopCount = shopSummaries.length;
+      const droppedRatio = shopCount ? droppedShops.length / shopCount : 0;
+      const previewMode = new URLSearchParams(window.location.search).has("previewAllShopAlert");
+
+      if (shopCount === 0 || (droppedRatio < 0.75 && !previewMode)) return null;
+
+      const currentTotal = shopSummaries.reduce((total, shop) => total + shop.current, 0);
+      const previousAverageTotal = shopSummaries.reduce((total, shop) => total + shop.previousAverage, 0);
+
+      return {
+        droppedShops,
+        shopCount,
+        droppedRatio,
+        currentTotal,
+        previousAverageTotal,
+        change: percentChange(currentTotal, previousAverageTotal),
+        previewMode,
+        series: buildWeeklySeries(rows).slice(-4)
+      };
+    }
+
+    function renderCompactLineChart(series) {
+      if (!series.length) {
+        return `<div class="empty-alerts">No weekly task volume is available.</div>`;
+      }
+
+      const chartSeries = series.length === 1 ? [...series, series[0]] : series;
+      const maxCalls = Math.max(...chartSeries.map(week => week.calls), 1);
+      const plot = { left: 48, top: 18, width: 430, height: 130 };
+      const points = pointsFor(chartSeries, "calls", 0, maxCalls * 1.12, plot);
+      const polyline = points.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const ticks = [0, Math.round(maxCalls / 2), maxCalls];
+
+      return `
+        <svg viewBox="0 0 520 200" role="img" aria-label="All-shop task volume for the current CSV weeks">
+          ${[0, 0.5, 1].map(ratio => {
+            const y = plot.top + ratio * plot.height;
+            return `<line class="grid-line" x1="${plot.left}" y1="${y}" x2="${plot.left + plot.width}" y2="${y}"></line>`;
+          }).join("")}
+          <polyline class="call-line" points="${polyline}"></polyline>
+          ${points.map(point => `
+            <circle class="call-point" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4">
+              <title>${point.week.label}: ${formatNumber(point.week.calls)} tasks</title>
+            </circle>
+          `).join("")}
+          ${points.map((point, index) => `
+            <text class="point-value" x="${point.x.toFixed(1)}" y="${point.y - (index % 2 === 0 ? 10 : 14)}" text-anchor="middle">${formatNumber(point.week.calls)}</text>
+          `).join("")}
+          ${ticks.map(value => {
+            const y = plot.top + ((maxCalls * 1.12 - value) / (maxCalls * 1.12 || 1)) * plot.height;
+            return `<text class="tick-label" x="${plot.left - 10}" y="${y + 4}" text-anchor="end">${formatNumber(value)}</text>`;
+          }).join("")}
+          ${points.map(point => `
+            <text class="tick-label" x="${point.x.toFixed(1)}" y="${plot.top + plot.height + 26}" text-anchor="middle">${point.week.label}</text>
+          `).join("")}
+          <text class="axis-label" x="${plot.left}" y="192">Week</text>
+          <text class="axis-label" x="${plot.left - 34}" y="12">Tasks</text>
+        </svg>
+      `;
+    }
+
+    function renderAllShopAlert() {
+      const alert = getAllShopDropAlert();
+      const container = document.getElementById("allShopAlert");
+
+      if (!alert) {
+        container.innerHTML = "";
+        return;
+      }
+
+      const droppedPercent = Math.round(alert.droppedRatio * 100);
+      container.innerHTML = `
+        <section class="all-shop-alert" aria-label="All-shop drop alert">
+          <div class="all-shop-alert-card">
+            <h2 class="all-shop-alert-title">${alert.previewMode ? "Preview: " : ""}All-shop alert: task volume is down across shops</h2>
+            ${alert.previewMode ? `
+              <p class="all-shop-alert-meta">
+                Preview mode is forcing this alert so you can review the layout.
+              </p>
+            ` : ""}
+            <p class="all-shop-alert-meta">
+              ${alert.droppedShops.length} of ${alert.shopCount} shops (${droppedPercent}%) are down more than 15% versus their previous four-week average.
+            </p>
+            <p class="all-shop-alert-meta">
+              Total current volume is ${formatNumber(alert.currentTotal)}, down ${Math.abs(alert.change).toFixed(1)}% from a ${formatNumber(Math.round(alert.previousAverageTotal))} four-week average.
+            </p>
+          </div>
+          <article class="compact-line-chart">
+            <div class="panel-head">
+              <h2 class="panel-title">Current CSV Weeks</h2>
+              <span class="panel-note">All-shop task volume</span>
+            </div>
+            <div class="chart-body">${renderCompactLineChart(alert.series)}</div>
+          </article>
+        </section>
+      `;
+    }
+
+    function pointsFor(series, valueKey, minValue, maxValue, chart) {
+      const valueRange = maxValue - minValue || 1;
+      return series.map((week, index) => {
+        const x = chart.left + (index / (series.length - 1)) * chart.width;
+        const y = chart.top + ((maxValue - week[valueKey]) / valueRange) * chart.height;
+        return { x, y, week };
+      });
+    }
+
+    function renderWeekChart(data) {
+      const chart = document.getElementById("weekChart");
+      const series = buildWeeklySeries(data);
+      const callsMax = Math.max(...series.map(week => week.calls), 1);
+      const changeValues = series.slice(1).map(week => week.change);
+      const changeMin = Math.min(0, ...changeValues);
+      const changeMax = Math.max(0, ...changeValues);
+      const paddedChangeMin = changeMin - Math.max(5, Math.abs(changeMin) * 0.15);
+      const paddedChangeMax = changeMax + Math.max(5, Math.abs(changeMax) * 0.15);
+      const plot = { left: 58, top: 22, width: 620, height: 220 };
+      const callsPoints = pointsFor(series, "calls", 0, callsMax * 1.12, plot);
+      const changePoints = pointsFor(series, "change", paddedChangeMin, paddedChangeMax, plot);
+      const callPolyline = callsPoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const changePolyline = changePoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const labelIndexes = [...new Set(series.map((week, index) => {
+        if (series.length <= 7) return index;
+        return Math.round(index * (series.length - 1) / 6);
+      }))];
+      const callTicks = [0, Math.round(callsMax / 2), callsMax];
+      const changeTicks = [paddedChangeMin, 0, paddedChangeMax];
+
+      chart.innerHTML = `
+        <div class="line-chart">
+          <svg viewBox="0 0 760 300" role="img" aria-label="Weekly call trend for the selected shop and task">
+            ${[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+              const y = plot.top + ratio * plot.height;
+              return `<line class="grid-line" x1="${plot.left}" y1="${y}" x2="${plot.left + plot.width}" y2="${y}"></line>`;
+            }).join("")}
+            <line class="grid-line" x1="${plot.left}" y1="${plot.top}" x2="${plot.left}" y2="${plot.top + plot.height}"></line>
+            <line class="grid-line" x1="${plot.left + plot.width}" y1="${plot.top}" x2="${plot.left + plot.width}" y2="${plot.top + plot.height}"></line>
+            <polyline class="call-line" points="${callPolyline}"></polyline>
+            <polyline class="change-line" points="${changePolyline}"></polyline>
+            ${callsPoints.map(point => `
+              <circle class="call-point" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4">
+                <title>${point.week.label}: ${formatNumber(point.week.calls)} calls</title>
+              </circle>
+            `).join("")}
+            ${changePoints.slice(1).map(point => `
+              <circle class="change-point" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.5">
+                <title>${point.week.label}: ${point.week.change.toFixed(1)}% week-over-week</title>
+              </circle>
+            `).join("")}
+            ${callsPoints.map((point, index) => `
+              <text class="point-value" x="${point.x.toFixed(1)}" y="${point.y - (index % 2 === 0 ? 10 : 14)}" text-anchor="middle">${formatNumber(point.week.calls)}</text>
+            `).join("")}
+            ${changePoints.slice(1).map((point, index) => `
+              <text class="point-value change-value" x="${point.x.toFixed(1)}" y="${point.y + (index % 2 === 0 ? 18 : 24)}" text-anchor="middle">${point.week.change.toFixed(1)}%</text>
+            `).join("")}
+            ${callTicks.map(value => {
+              const y = plot.top + ((callsMax * 1.12 - value) / (callsMax * 1.12 || 1)) * plot.height;
+              return `<text class="tick-label" x="${plot.left - 10}" y="${y + 4}" text-anchor="end">${formatNumber(value)}</text>`;
+            }).join("")}
+            ${changeTicks.map(value => {
+              const y = plot.top + ((paddedChangeMax - value) / (paddedChangeMax - paddedChangeMin || 1)) * plot.height;
+              return `<text class="tick-label" x="${plot.left + plot.width + 10}" y="${y + 4}">${value.toFixed(0)}%</text>`;
+            }).join("")}
+            ${labelIndexes.map(index => `
+              <text class="tick-label" x="${callsPoints[index].x.toFixed(1)}" y="${plot.top + plot.height + 26}" text-anchor="middle">${series[index].label}</text>
+            `).join("")}
+            <text class="axis-label" x="${plot.left}" y="292">Week</text>
+            <text class="axis-label" x="${plot.left - 42}" y="16">Calls</text>
+            <text class="axis-label" x="${plot.left + plot.width - 28}" y="16">% change</text>
+          </svg>
+          <div class="chart-legend" aria-hidden="true">
+            <span class="legend-item"><span class="legend-swatch"></span>Calls</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch-change"></span>Week-over-week change</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAlerts(data) {
+      const alertRows = data
+        .map(row => ({ ...row, status: getStatus(row) }))
+        .filter(row => row.status.level !== "ok")
+        .sort((a, b) => {
+          const severity = { special: 0, red: 1, amber: 2 };
+          return severity[a.status.level] - severity[b.status.level] || a.current - b.current;
+        });
+
+      const alerts = document.getElementById("alerts");
+      document.getElementById("alertCount").textContent =
+        `${alertRows.length} alert${alertRows.length === 1 ? "" : "s"}`;
+
+      if (!alertRows.length) {
+        alerts.innerHTML = `<div class="empty-alerts">No active warnings for the selected filters.</div>`;
+        return;
+      }
+
+      alerts.innerHTML = alertRows.map(row => `
+        <div class="alert alert-${row.status.level}">
+          <div class="alert-title">
+            <span>${row.task}</span>
+            <span>${row.status.label}</span>
+          </div>
+          <div class="alert-meta">
+            ${row.status.reason}. Current: ${formatNumber(row.current)}; last week: ${formatNumber(row.previous)}.
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderTable(data) {
+      const body = document.getElementById("detailRows");
+      const drops = getDropRows(data);
+
+      body.innerHTML = drops.length ? drops
+        .sort((a, b) => a.store.localeCompare(b.store) || a.task.localeCompare(b.task))
+        .map(row => {
+          const status = getStatus(row);
+          return `
+            <tr>
+              <td>${row.store}</td>
+              <td>${row.task}</td>
+              <td class="num">${formatNumber(row.current)}</td>
+              <td class="num">${formatNumber(Math.round(row.previousFourWeekAvg))}</td>
+              <td class="num trend-down">${row.change.toFixed(1)}%</td>
+              <td class="num">${row.daysSinceCall}</td>
+              <td><span class="badge badge-${status.level}">${status.label}</span></td>
+            </tr>
+          `;
+        }).join("") : `
+          <tr>
+            <td colspan="7">No tasks are down more than 20% from their previous four-week average for this shop.</td>
+          </tr>
+        `;
+    }
+
+    function isBottomUrgentTask(task) {
+      return task.includes("BG") ||
+        task === "Next Day Satisfaction" ||
+        task === "Retention Re-Engage" ||
+        task === "Reservation No Show" ||
+        task === "Returning Lost Vehicle";
+    }
+
+    function urgentTaskSort(a, b) {
+      return Number(isBottomUrgentTask(a.task)) - Number(isBottomUrgentTask(b.task)) ||
+        a.task.localeCompare(b.task);
+    }
+
+    function renderUrgentDrops() {
+      const groups = uniqueValues("task").map(task => ({
+        task,
+        drops: getDropRows(rows.filter(row => row.task === task))
+      })).filter(group => group.drops.length > 0)
+        .sort(urgentTaskSort);
+
+      document.getElementById("urgentGroups").innerHTML = groups.length ? groups.map(group => {
+        const body = group.drops.length ? group.drops.map((row, index) => {
+          const status = getStatus(row);
+          return `
+            <tr>
+              <td>${index + 1}</td>
+              <td>${row.store}</td>
+              <td class="num">${formatNumber(row.current)}</td>
+              <td class="num">${formatNumber(Math.round(row.previousFourWeekAvg))}</td>
+              <td class="num trend-down">${row.change.toFixed(1)}%</td>
+              <td class="num trend-down">-${formatNumber(Math.round(row.drop))}</td>
+              <td class="num">${row.daysSinceCall}</td>
+              <td><span class="badge badge-${status.level}">${status.label}</span></td>
+            </tr>
+          `;
+        }).join("") : `
+          <tr>
+            <td colspan="8">No shops are down more than 20% from the previous four-week average for this task.</td>
+          </tr>
+        `;
+
+        return `
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">${group.task}</h2>
+              <span class="panel-note">${group.drops.length} drop${group.drops.length === 1 ? "" : "s"}</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Shop</th>
+                    <th class="num">Last 7 Days</th>
+                    <th class="num">Previous 4 Week Avg</th>
+                    <th class="num">% Change</th>
+                    <th class="num">Drop in Calls</th>
+                    <th class="num">Days Since Call</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>${body}</tbody>
+              </table>
+            </div>
+          </article>
+        `;
+      }).join("") : `
+        <article class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">No Warning-Level Drops</h2>
+            <span class="panel-note">All task drops are 20% or less</span>
+          </div>
+          <div class="alerts">
+            <div class="empty-alerts">No tasks are down more than 20% from their previous four-week average.</div>
+          </div>
+        </article>
+      `;
+    }
+
+    function setActiveView() {
+      const shopPage = isShopPage();
+      document.querySelectorAll(".view").forEach(view => {
+        view.classList.toggle("view-active", shopPage ? view.id === "storeDashboard" : view.id === "urgentDrops");
+      });
+      taskControl.classList.toggle("control-hidden", !shopPage);
+    }
+
+    function syncWarningPanelHeight() {
+      const trendPanel = document.getElementById("trendPanel");
+      const warningPanel = document.getElementById("warningPanel");
+      if (!trendPanel || !warningPanel) return;
+
+      warningPanel.style.height = "";
+      if (!isShopPage() || window.matchMedia("(max-width: 980px)").matches) return;
+
+      warningPanel.style.height = `${trendPanel.offsetHeight}px`;
+    }
+
+    function render() {
+      const storeData = selectedStoreRows();
+      const graphData = filteredRows();
+
+      renderWeekChart(graphData);
+      renderAlerts(storeData);
+      renderTable(storeData);
+      renderAllShopAlert();
+      renderUrgentDrops();
+      setActiveView();
+      syncWarningPanelHeight();
+    }
+
+    loadDashboardData().catch(error => {
+      console.error(error);
+      document.getElementById("asOfDate").textContent = "Dashboard data could not be loaded. Check the Google Sheet CSV link and published sharing settings.";
+    });
+    window.addEventListener("resize", syncWarningPanelHeight);
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
