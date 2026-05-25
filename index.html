@@ -1093,6 +1093,9 @@
       const maxCalls = Math.max(...chartSeries.map(week => week.calls), 1);
       const plot = { left: 48, top: 18, width: 430, height: 130 };
       const points = pointsFor(chartSeries, "calls", 0, maxCalls * 1.12, plot);
+      if (!points.length) {
+        return `<div class="empty-alerts">No weekly task volume is available.</div>`;
+      }
       const polyline = points.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
       const ticks = [0, Math.round(maxCalls / 2), maxCalls];
 
@@ -1163,11 +1166,12 @@
 
     function pointsFor(series, valueKey, minValue, maxValue, chart) {
       const valueRange = maxValue - minValue || 1;
-      return series.map((week, index) => {
+      return series.filter(Boolean).map((week, index) => {
         const x = chart.left + (series.length <= 1 ? chart.width / 2 : (index / (series.length - 1)) * chart.width);
-        const y = chart.top + ((maxValue - week[valueKey]) / valueRange) * chart.height;
+        const value = numericValue(week[valueKey]);
+        const y = chart.top + ((maxValue - value) / valueRange) * chart.height;
         return { x, y, week };
-      });
+      }).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
     }
 
     function renderWeekChart(data) {
@@ -1187,12 +1191,18 @@
       const plot = { left: 58, top: 22, width: 620, height: 220 };
       const callsPoints = pointsFor(series, "calls", 0, callsMax * 1.12, plot);
       const changePoints = pointsFor(series, "change", paddedChangeMin, paddedChangeMax, plot);
+      if (!callsPoints.length) {
+        chart.innerHTML = `<div class="empty-alerts">No weekly task volume is available for this selection.</div>`;
+        return;
+      }
+
       const callPolyline = callsPoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
       const changePolyline = changePoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
-      const labelIndexes = [...new Set(series.map((week, index) => {
-        if (series.length <= 7) return index;
-        return Math.round(index * (series.length - 1) / 6);
-      }))].filter(index => callsPoints[index] && series[index]);
+      const labelPoints = callsPoints.filter((point, index) => {
+        if (callsPoints.length <= 7) return true;
+        const labelIndexes = new Set([...Array(7)].map((_, labelIndex) => Math.round(labelIndex * (callsPoints.length - 1) / 6)));
+        return labelIndexes.has(index);
+      });
       const callTicks = [0, Math.round(callsMax / 2), callsMax];
       const changeTicks = [paddedChangeMin, 0, paddedChangeMax];
 
@@ -1231,8 +1241,8 @@
               const y = plot.top + ((paddedChangeMax - value) / (paddedChangeMax - paddedChangeMin || 1)) * plot.height;
               return `<text class="tick-label" x="${plot.left + plot.width + 10}" y="${y + 4}">${value.toFixed(0)}%</text>`;
             }).join("")}
-            ${labelIndexes.map(index => `
-              <text class="tick-label" x="${callsPoints[index].x.toFixed(1)}" y="${plot.top + plot.height + 26}" text-anchor="middle">${series[index].label}</text>
+            ${labelPoints.map(point => `
+              <text class="tick-label" x="${point.x.toFixed(1)}" y="${plot.top + plot.height + 26}" text-anchor="middle">${point.week.label}</text>
             `).join("")}
             <text class="axis-label" x="${plot.left}" y="292">Week</text>
             <text class="axis-label" x="${plot.left - 42}" y="16">Calls</text>
