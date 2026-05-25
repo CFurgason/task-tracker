@@ -844,7 +844,12 @@
       } catch (error) {
         console.error(error);
         if (!csvUrl) throw error;
-        dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+
+        try {
+          dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+        } catch (fallbackError) {
+          throw new Error(`Google Sheet failed: ${error.message}. Fallback JSON failed: ${fallbackError.message}`);
+        }
       }
 
       rows = dashboardData.rows.filter(row => !dashboardConfig.excludedTasks.has(row.task));
@@ -1406,7 +1411,7 @@
 
     loadDashboardData().catch(error => {
       console.error(error);
-      document.getElementById("asOfDate").textContent = "Dashboard data could not be loaded. Check the Google Sheet CSV link and published sharing settings.";
+      document.getElementById("asOfDate").textContent = `Dashboard data could not be loaded: ${error.message}`;
     });
     window.addEventListener("resize", syncWarningPanelHeight);
   </script>
