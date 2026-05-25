@@ -684,6 +684,10 @@
       let row = [];
       let field = "";
       let inQuotes = false;
+      const firstLine = text.split(/\r?\n/, 1)[0] || "";
+      const commaCount = (firstLine.match(/,/g) || []).length;
+      const tabCount = (firstLine.match(/\t/g) || []).length;
+      const delimiter = tabCount > commaCount ? "\t" : ",";
 
       for (let i = 0; i < text.length; i += 1) {
         const char = text[i];
@@ -703,7 +707,7 @@
 
         if (char === '"') {
           inQuotes = true;
-        } else if (char === ',') {
+        } else if (char === delimiter) {
           row.push(field);
           field = "";
         } else if (char === "\n" || char === "\r") {
