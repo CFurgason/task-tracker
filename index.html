@@ -467,6 +467,49 @@
       align-self: start;
     }
 
+    .projection-summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .metric-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 15px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 1.55rem;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .metric-subvalue {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+
+    .projection-note {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.4;
+      padding: 0 18px 14px;
+    }
+
     .urgent-groups table {
       min-width: 0;
     }
@@ -543,6 +586,7 @@
       .controls,
       .dashboard-grid,
       .all-shop-alert,
+      .projection-summary,
       .urgent-groups {
         grid-template-columns: 1fr;
       }
@@ -659,6 +703,37 @@
         <section id="allShopAlert" aria-live="polite"></section>
         <section class="urgent-groups" id="urgentGroups" aria-label="Most concerning call drops grouped by task"></section>
       </div>
+
+      <div id="currentMonthProjection" class="view">
+        <section class="projection-summary" id="projectionSummary" aria-label="Current month projection summary"></section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">Current Month Projection</h2>
+            <span class="panel-note" id="projectionDateRange"></span>
+          </div>
+          <p class="projection-note" id="projectionNote"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Shop</th>
+                  <th class="num">Calls MTD</th>
+                  <th class="num">Projected Calls</th>
+                  <th class="num">Appointments MTD</th>
+                  <th class="num">Projected Appointments</th>
+                  <th class="num">Opened ROs MTD</th>
+                  <th class="num">Projected Opened ROs</th>
+                  <th class="num">Posted ROs MTD</th>
+                  <th class="num">Projected Posted ROs</th>
+                  <th class="num">Revenue MTD</th>
+                  <th class="num">Projected Revenue</th>
+                </tr>
+              </thead>
+              <tbody id="projectionRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 
@@ -674,6 +749,7 @@
 
     let dashboardData = null;
     let rows = [];
+    let rawTaskRows = [];
 
     const viewSelector = document.getElementById("viewSelector");
     const taskFilter = document.getElementById("taskFilter");
@@ -754,15 +830,50 @@
       return items.filter(item => item.date >= startDate && item.date <= endDate).length;
     }
 
-    function buildDashboardDataFromCsv(csvText) {
-      const taskRows = parseCsv(csvText)
-        .map(item => {
+    function parseIdList(value) {
+      return String(value || "")
+        .split(",")
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => {
+          const match = part.match(/[A-Za-z0-9-]+/);
+          return match ? match[0] : part;
+        })
+        .filter(Boolean);
+    }
+
+    function parseMoney(value) {
+      const number = Number(String(value || "").replace(/[$,]/g, "").trim());
+      return Number.isFinite(number) ? number : 0;
+    }
+
+    function parseRawTaskRows(csvText) {
+      return parseCsv(csvText)
+        .map((item, index) => {
           const shop = String(item["Shop Name"] || "").trim();
           const task = String(item["Task Association"] || "").trim();
           const date = parseTaskDate(item["Date/Time Stamp"]);
-          return { shop, task, date };
+
+          return {
+            rowIndex: index,
+            shop,
+            task,
+            date,
+            taskId: String(item["Task ID"] || "").trim(),
+            appointmentIds: parseIdList(item["Appointment IDs"]),
+            openedRoIds: parseIdList(item["Opened RO IDs"]),
+            postedRoIds: parseIdList(item["Posted RO IDs"]),
+            appointmentCount: numericValue(item["Appointments"]),
+            openedRoCount: numericValue(item["Opened ROs"]),
+            postedRoCount: numericValue(item["Posted ROs"]),
+            revenue: parseMoney(item["Revenue Total $"])
+          };
         })
         .filter(item => item.shop && item.task && item.date && !dashboardConfig.excludedShops.has(item.shop));
+    }
+
+    function buildDashboardDataFromCsv(csvText) {
+      const taskRows = parseRawTaskRows(csvText);
 
       if (!taskRows.length) {
         throw new Error("No usable task rows were found in the Google Sheet CSV.");
@@ -821,6 +932,7 @@
         asOfDate: isoDate(maxDate),
         refreshedAt: new Date().toISOString(),
         windowLabel: `Current Google Sheet dates: ${minDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} through ${maxDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`,
+        rawRows: taskRows,
         rows: groupedRows
       };
     }
@@ -840,6 +952,11 @@
           dashboardData = buildDashboardDataFromCsv(await fetchText(csvUrl));
         } else {
           dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
+          try {
+            rawTaskRows = parseRawTaskRows(await fetchText("codex_task_tracker.csv"));
+          } catch (rawError) {
+            console.warn("Raw CSV unavailable for current month projection.", rawError);
+          }
         }
       } catch (error) {
         console.error(error);
@@ -852,6 +969,7 @@
         }
       }
 
+      rawTaskRows = rawTaskRows.length ? rawTaskRows : (dashboardData.rawRows || []);
       rows = dashboardData.rows.filter(row => !dashboardConfig.excludedTasks.has(row.task));
       initializeControls();
       renderDataDate();
@@ -859,7 +977,10 @@
     }
 
     function initializeControls() {
-      viewSelector.innerHTML = '<option value="urgentDrops">Urgent Drops</option>';
+      viewSelector.innerHTML = `
+        <option value="urgentDrops">Urgent Drops</option>
+        <option value="currentMonthProjection">Current Month Projection</option>
+      `;
       taskFilter.innerHTML = '<option value="All">All Tasks</option>';
       addOptions(viewSelector, uniqueValues("store"));
       addOptions(taskFilter, uniqueValues("task"));
@@ -913,11 +1034,11 @@
       });
     }
     function selectedStore() {
-      return viewSelector.value === "urgentDrops" ? uniqueValues("store")[0] : viewSelector.value;
+      return isShopPage() ? viewSelector.value : uniqueValues("store")[0];
     }
 
     function isShopPage() {
-      return viewSelector.value !== "urgentDrops";
+      return !["urgentDrops", "currentMonthProjection"].includes(viewSelector.value);
     }
 
     function selectedStoreRows() {
@@ -946,6 +1067,14 @@
 
     function formatNumber(value) {
       return numericValue(value).toLocaleString();
+    }
+
+    function formatCurrency(value) {
+      return numericValue(value).toLocaleString(undefined, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0
+      });
     }
 
     function percentChange(current, previous) {
@@ -1404,10 +1533,157 @@
       `;
     }
 
+    function emptyProjection() {
+      document.getElementById("projectionSummary").innerHTML = "";
+      document.getElementById("projectionDateRange").textContent = "";
+      document.getElementById("projectionNote").textContent =
+        "Current month projections require raw CSV rows with appointment and RO ID columns.";
+      document.getElementById("projectionRows").innerHTML = `
+        <tr>
+          <td colspan="11">Raw CSV data is not available for this dashboard load.</td>
+        </tr>
+      `;
+    }
+
+    function countUniqueIds(records, idKey, countKey, prefix) {
+      const seen = new Set();
+
+      records.forEach(record => {
+        const ids = record[idKey] || [];
+        if (ids.length) {
+          ids.forEach(id => seen.add(`${record.shop}\u0000${id}`));
+          return;
+        }
+
+        const count = Math.max(0, Math.round(numericValue(record[countKey])));
+        for (let index = 0; index < count; index += 1) {
+          seen.add(`${record.shop}\u0000${prefix}\u0000${record.taskId || record.rowIndex}\u0000${index}`);
+        }
+      });
+
+      return seen.size;
+    }
+
+    function sumDedupedRevenue(records) {
+      const seenPostedRos = new Set();
+      const seenFallbackRows = new Set();
+      let total = 0;
+
+      records.forEach(record => {
+        if (record.revenue <= 0) return;
+
+        const postedRoIds = record.postedRoIds || [];
+        if (postedRoIds.length) {
+          const hasNewRo = postedRoIds.some(id => !seenPostedRos.has(`${record.shop}\u0000${id}`));
+          postedRoIds.forEach(id => seenPostedRos.add(`${record.shop}\u0000${id}`));
+          if (hasNewRo) total += record.revenue;
+          return;
+        }
+
+        const fallbackKey = `${record.shop}\u0000${record.taskId || record.rowIndex}`;
+        if (!seenFallbackRows.has(fallbackKey)) {
+          seenFallbackRows.add(fallbackKey);
+          total += record.revenue;
+        }
+      });
+
+      return total;
+    }
+
+    function summarizeProjectionRecords(records, projectionFactor) {
+      const actual = {
+        calls: records.length,
+        appointments: countUniqueIds(records, "appointmentIds", "appointmentCount", "appointment"),
+        openedRos: countUniqueIds(records, "openedRoIds", "openedRoCount", "openedRo"),
+        postedRos: countUniqueIds(records, "postedRoIds", "postedRoCount", "postedRo"),
+        revenue: sumDedupedRevenue(records)
+      };
+
+      return {
+        ...actual,
+        projectedCalls: actual.calls * projectionFactor,
+        projectedAppointments: actual.appointments * projectionFactor,
+        projectedOpenedRos: actual.openedRos * projectionFactor,
+        projectedPostedRos: actual.postedRos * projectionFactor,
+        projectedRevenue: actual.revenue * projectionFactor
+      };
+    }
+
+    function renderProjectionMetric(label, actual, projected, formatter = formatNumber) {
+      return `
+        <article class="metric-card">
+          <div class="metric-label">${label}</div>
+          <div class="metric-value">${formatter(Math.round(projected))}</div>
+          <div class="metric-subvalue">${formatter(Math.round(actual))} month to date</div>
+        </article>
+      `;
+    }
+
+    function renderCurrentMonthProjection() {
+      if (!rawTaskRows.length) {
+        emptyProjection();
+        return;
+      }
+
+      const asOfDate = parseTaskDate(dashboardData.asOfDate) || new Date(Math.max(...rawTaskRows.map(row => row.date.getTime())));
+      const monthStart = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 1);
+      const monthEnd = new Date(asOfDate.getFullYear(), asOfDate.getMonth() + 1, 0);
+      const elapsedDays = asOfDate.getDate();
+      const daysInMonth = monthEnd.getDate();
+      const projectionFactor = elapsedDays ? daysInMonth / elapsedDays : 1;
+      const monthRows = rawTaskRows
+        .filter(row => !dashboardConfig.excludedTasks.has(row.task))
+        .filter(row => row.date >= monthStart && row.date <= asOfDate);
+
+      const totals = summarizeProjectionRecords(monthRows, projectionFactor);
+      document.getElementById("projectionDateRange").textContent =
+        `${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
+      document.getElementById("projectionNote").textContent =
+        `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO month-to-date counts are deduped by shop and ID.`;
+
+      document.getElementById("projectionSummary").innerHTML = [
+        renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
+        renderProjectionMetric("Projected Appointments", totals.appointments, totals.projectedAppointments),
+        renderProjectionMetric("Projected Opened ROs", totals.openedRos, totals.projectedOpenedRos),
+        renderProjectionMetric("Projected Posted ROs", totals.postedRos, totals.projectedPostedRos),
+        renderProjectionMetric("Projected Revenue", totals.revenue, totals.projectedRevenue, formatCurrency)
+      ].join("");
+
+      const shopRows = uniqueValues("store").map(store => {
+        const storeRecords = monthRows.filter(row => row.shop === store);
+        return {
+          store,
+          ...summarizeProjectionRecords(storeRecords, projectionFactor)
+        };
+      }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0)
+        .sort((a, b) => b.projectedRevenue - a.projectedRevenue || b.projectedCalls - a.projectedCalls || a.store.localeCompare(b.store));
+
+      document.getElementById("projectionRows").innerHTML = shopRows.length ? shopRows.map(row => `
+        <tr>
+          <td>${row.store}</td>
+          <td class="num">${formatNumber(row.calls)}</td>
+          <td class="num">${formatNumber(Math.round(row.projectedCalls))}</td>
+          <td class="num">${formatNumber(row.appointments)}</td>
+          <td class="num">${formatNumber(Math.round(row.projectedAppointments))}</td>
+          <td class="num">${formatNumber(row.openedRos)}</td>
+          <td class="num">${formatNumber(Math.round(row.projectedOpenedRos))}</td>
+          <td class="num">${formatNumber(row.postedRos)}</td>
+          <td class="num">${formatNumber(Math.round(row.projectedPostedRos))}</td>
+          <td class="num">${formatCurrency(row.revenue)}</td>
+          <td class="num">${formatCurrency(row.projectedRevenue)}</td>
+        </tr>
+      `).join("") : `
+        <tr>
+          <td colspan="11">No current month rows are available through ${formatDashboardDate(isoDate(asOfDate))}.</td>
+        </tr>
+      `;
+    }
+
     function setActiveView() {
       const shopPage = isShopPage();
       document.querySelectorAll(".view").forEach(view => {
-        view.classList.toggle("view-active", shopPage ? view.id === "storeDashboard" : view.id === "urgentDrops");
+        const activeViewId = shopPage ? "storeDashboard" : viewSelector.value;
+        view.classList.toggle("view-active", view.id === activeViewId);
       });
       taskControl.classList.toggle("control-hidden", !shopPage);
     }
@@ -1432,6 +1708,7 @@
       renderTable(storeData);
       renderAllShopAlert();
       renderUrgentDrops();
+      renderCurrentMonthProjection();
       setActiveView();
       syncWarningPanelHeight();
     }
