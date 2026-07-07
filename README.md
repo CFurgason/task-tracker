@@ -7,7 +7,6 @@ The dashboard is now set up for GitHub Pages hosting with Google Sheets as the d
 ## Files people should use
 
 - `index.html` is the GitHub Pages entry point.
-- `task-tracker-dashboard.html` is the same dashboard with the original filename.
 - `google-sheets-config.js` is where the Google Sheets CSV URL goes.
 - `task-tracker-data.json` is the fallback data file if the Google Sheet URL is blank or unavailable.
 - `codex_task_tracker.csv` is the raw export used to refresh the fallback JSON.
@@ -15,8 +14,6 @@ The dashboard is now set up for GitHub Pages hosting with Google Sheets as the d
 - `open-task-tracker.ps1` refreshes the dashboard and opens it in the default browser.
 - `open-task-tracker.cmd` and `refresh-task-tracker.cmd` are double-click friendly launchers for Windows.
 - `daily-update-dashboard.cmd` is the easiest daily updater. Drag the latest CSV onto it, or double-click it after replacing `codex_task_tracker.csv`.
-
-`call-volume-dashboard.html` is the working source file. `task-traker-dashboard.html` is kept as a legacy copy for the older misspelled filename.
 
 ## Google Sheets setup
 
@@ -46,7 +43,6 @@ index.html?sheetCsv=https%3A%2F%2Fdocs.google.com%2Fspreadsheets%2Fd%2Fe%2F...%2
 
 ```text
 index.html
-task-tracker-dashboard.html
 google-sheets-config.js
 task-tracker-data.json
 .nojekyll
@@ -84,7 +80,7 @@ Fallback refresh workflow:
 
 1. Export the latest task tracker CSV.
 2. Drag that CSV file onto `daily-update-dashboard.cmd`.
-3. The script copies it to `codex_task_tracker.csv`, refreshes the dashboard, and opens `task-tracker-dashboard.html`.
+3. The script copies it to `codex_task_tracker.csv`, refreshes the fallback JSON, and opens `index.html`.
 
 Alternative workflow:
 
@@ -109,20 +105,14 @@ If PowerShell blocks scripts on this computer, use:
 powershell -ExecutionPolicy Bypass -File .\refresh-task-tracker.ps1
 ```
 
-The script updates:
-
-- `call-volume-dashboard.html`
-- `index.html`
-- `task-tracker-dashboard.html`
-- `task-traker-dashboard.html`
-- `task-tracker-data.json`
+The script updates `task-tracker-data.json`.
 
 ## Preview the all-shop alert
 
 To force the all-shop alert to appear for layout review, open:
 
 ```text
-task-tracker-dashboard.html?previewAllShopAlert=1
+index.html?previewAllShopAlert=1
 ```
 
 Without that query string, the alert only appears when more than 75% of shops are down more than 15%.
@@ -132,7 +122,6 @@ Without that query string, the alert only appears when more than 75% of shops ar
 For GitHub Pages, share the repository Pages URL. For a shared-drive fallback rollout, place these files in the shared folder:
 
 - `index.html`
-- `task-tracker-dashboard.html`
 - `google-sheets-config.js`
 - `task-tracker-data.json`
 - `codex_task_tracker.csv`
