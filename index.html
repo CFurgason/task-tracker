@@ -964,12 +964,7 @@
       } catch (error) {
         console.error(error);
         if (!csvUrl) throw error;
-
-        try {
-          dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
-        } catch (fallbackError) {
-          throw new Error(`Google Sheet failed: ${error.message}. Fallback JSON failed: ${fallbackError.message}`);
-        }
+        throw new Error(`Google Sheet failed: ${error.message}. Check google-sheets-config.js and confirm the published CSV URL is correct.`);
       }
 
       rawTaskRows = rawTaskRows.length ? rawTaskRows : (dashboardData.rawRows || []);
