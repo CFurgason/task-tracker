@@ -101,7 +101,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: repeat(2, minmax(160px, 1fr));
+      grid-template-columns: repeat(3, minmax(160px, 1fr));
       gap: 14px;
       margin-bottom: 20px;
     }
@@ -654,6 +654,12 @@
             <option value="All">All tasks</option>
           </select>
         </div>
+        <div class="control control-hidden" id="projectionShopControl">
+          <label for="projectionShopFilter">Projection shop</label>
+          <select id="projectionShopFilter">
+            <option value="All">All shops</option>
+          </select>
+        </div>
       </section>
 
       <div id="storeDashboard" class="view">
@@ -717,15 +723,10 @@
               <thead>
                 <tr>
                   <th>Shop</th>
-                  <th class="num">Calls MTD</th>
                   <th class="num">Projected Calls</th>
-                  <th class="num">Appointments MTD</th>
                   <th class="num">Projected Appointments</th>
-                  <th class="num">Opened ROs MTD</th>
                   <th class="num">Projected Opened ROs</th>
-                  <th class="num">Posted ROs MTD</th>
                   <th class="num">Projected Posted ROs</th>
-                  <th class="num">Revenue MTD</th>
                   <th class="num">Projected Revenue</th>
                 </tr>
               </thead>
@@ -754,6 +755,8 @@
     const viewSelector = document.getElementById("viewSelector");
     const taskFilter = document.getElementById("taskFilter");
     const taskControl = document.getElementById("taskControl");
+    const projectionShopFilter = document.getElementById("projectionShopFilter");
+    const projectionShopControl = document.getElementById("projectionShopControl");
 
     function parseCsv(text) {
       const rows = [];
@@ -982,10 +985,12 @@
         <option value="currentMonthProjection">Current Month Projection</option>
       `;
       taskFilter.innerHTML = '<option value="All">All Tasks</option>';
+      projectionShopFilter.innerHTML = '<option value="All">All Shops</option>';
       addOptions(viewSelector, uniqueValues("store"));
       addOptions(taskFilter, uniqueValues("task"));
+      addOptions(projectionShopFilter, uniqueValues("store"));
 
-      [viewSelector, taskFilter].forEach(control => {
+      [viewSelector, taskFilter, projectionShopFilter].forEach(control => {
         control.addEventListener("input", render);
         control.addEventListener("change", render);
       });
@@ -1540,7 +1545,7 @@
         "Current month projections require raw CSV rows with appointment and RO ID columns.";
       document.getElementById("projectionRows").innerHTML = `
         <tr>
-          <td colspan="11">Raw CSV data is not available for this dashboard load.</td>
+          <td colspan="6">Raw CSV data is not available for this dashboard load.</td>
         </tr>
       `;
     }
@@ -1614,7 +1619,6 @@
         <article class="metric-card">
           <div class="metric-label">${label}</div>
           <div class="metric-value">${formatter(Math.round(projected))}</div>
-          <div class="metric-subvalue">${formatter(Math.round(actual))} month to date</div>
         </article>
       `;
     }
@@ -1625,21 +1629,23 @@
         return;
       }
 
-      const asOfDate = parseTaskDate(dashboardData.asOfDate) || new Date(Math.max(...rawTaskRows.map(row => row.date.getTime())));
+      const asOfDate = new Date(Math.max(...rawTaskRows.map(row => row.date.getTime())));
       const monthStart = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 1);
       const monthEnd = new Date(asOfDate.getFullYear(), asOfDate.getMonth() + 1, 0);
       const elapsedDays = asOfDate.getDate();
       const daysInMonth = monthEnd.getDate();
       const projectionFactor = elapsedDays ? daysInMonth / elapsedDays : 1;
+      const selectedProjectionShop = projectionShopFilter.value;
       const monthRows = rawTaskRows
         .filter(row => !dashboardConfig.excludedTasks.has(row.task))
-        .filter(row => row.date >= monthStart && row.date <= asOfDate);
+        .filter(row => row.date >= monthStart && row.date <= asOfDate)
+        .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
 
       const totals = summarizeProjectionRecords(monthRows, projectionFactor);
       document.getElementById("projectionDateRange").textContent =
-        `${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
+        `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
-        `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO month-to-date counts are deduped by shop and ID.`;
+        `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO counts are deduped by shop and ID before projection.`;
 
       document.getElementById("projectionSummary").innerHTML = [
         renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
@@ -1649,7 +1655,8 @@
         renderProjectionMetric("Projected Revenue", totals.revenue, totals.projectedRevenue, formatCurrency)
       ].join("");
 
-      const shopRows = uniqueValues("store").map(store => {
+      const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
+      const shopRows = projectionStores.map(store => {
         const storeRecords = monthRows.filter(row => row.shop === store);
         return {
           store,
@@ -1661,20 +1668,15 @@
       document.getElementById("projectionRows").innerHTML = shopRows.length ? shopRows.map(row => `
         <tr>
           <td>${row.store}</td>
-          <td class="num">${formatNumber(row.calls)}</td>
           <td class="num">${formatNumber(Math.round(row.projectedCalls))}</td>
-          <td class="num">${formatNumber(row.appointments)}</td>
           <td class="num">${formatNumber(Math.round(row.projectedAppointments))}</td>
-          <td class="num">${formatNumber(row.openedRos)}</td>
           <td class="num">${formatNumber(Math.round(row.projectedOpenedRos))}</td>
-          <td class="num">${formatNumber(row.postedRos)}</td>
           <td class="num">${formatNumber(Math.round(row.projectedPostedRos))}</td>
-          <td class="num">${formatCurrency(row.revenue)}</td>
           <td class="num">${formatCurrency(row.projectedRevenue)}</td>
         </tr>
       `).join("") : `
         <tr>
-          <td colspan="11">No current month rows are available through ${formatDashboardDate(isoDate(asOfDate))}.</td>
+          <td colspan="6">No current month rows are available through ${formatDashboardDate(isoDate(asOfDate))}.</td>
         </tr>
       `;
     }
@@ -1686,6 +1688,7 @@
         view.classList.toggle("view-active", view.id === activeViewId);
       });
       taskControl.classList.toggle("control-hidden", !shopPage);
+      projectionShopControl.classList.toggle("control-hidden", viewSelector.value !== "currentMonthProjection");
     }
 
     function syncWarningPanelHeight() {
