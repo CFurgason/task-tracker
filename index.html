@@ -946,13 +946,93 @@
       return response.text();
     }
 
+    function csvEscape(value) {
+      const text = String(value ?? "");
+      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    function googleDateText(value) {
+      const match = String(value || "").match(/^Date\((\d+),(\d+),(\d+)(?:,\d+,\d+,\d+)?\)$/);
+      if (!match) return value;
+
+      const date = new Date(Number(match[1]), Number(match[2]), Number(match[3]));
+      return date.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "numeric" });
+    }
+
+    function googleSheetTableToCsv(table) {
+      const headers = (table.cols || []).map(column => column.label || column.id || "");
+      const lines = [headers.map(csvEscape).join(",")];
+
+      (table.rows || []).forEach(row => {
+        const values = headers.map((_, index) => {
+          const cell = row.c?.[index];
+          if (!cell) return "";
+          return cell.f ?? googleDateText(cell.v) ?? "";
+        });
+        lines.push(values.map(csvEscape).join(","));
+      });
+
+      return lines.join("\n");
+    }
+
+    function googleSheetJsonpUrl(url, callbackName) {
+      const parsed = new URL(url, window.location.href);
+      const idMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+      if (!idMatch) throw new Error("Google Sheet URL does not include a spreadsheet ID.");
+
+      const gid = parsed.searchParams.get("gid") || "0";
+      return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/gviz/tq?tqx=responseHandler:${callbackName}&gid=${encodeURIComponent(gid)}`;
+    }
+
+    function fetchGoogleSheetViaJsonp(url) {
+      return new Promise((resolve, reject) => {
+        const callbackName = `taskTrackerSheetCallback_${Date.now()}_${Math.round(Math.random() * 100000)}`;
+        const script = document.createElement("script");
+        const timeout = window.setTimeout(() => {
+          cleanup();
+          reject(new Error("Google Sheet JSONP request timed out."));
+        }, 15000);
+
+        function cleanup() {
+          window.clearTimeout(timeout);
+          delete window[callbackName];
+          script.remove();
+        }
+
+        window[callbackName] = response => {
+          cleanup();
+          if (response.status === "error") {
+            reject(new Error(response.errors?.[0]?.detailed_message || "Google Sheet returned an error."));
+            return;
+          }
+          resolve(googleSheetTableToCsv(response.table || {}));
+        };
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("Google Sheet JSONP request failed."));
+        };
+        script.src = googleSheetJsonpUrl(url, callbackName);
+        document.head.appendChild(script);
+      });
+    }
+
+    async function loadGoogleSheetCsv(url) {
+      try {
+        return await fetchText(url);
+      } catch (fetchError) {
+        console.warn("Google Sheet fetch failed; trying JSONP fallback.", fetchError);
+        return fetchGoogleSheetViaJsonp(url);
+      }
+    }
+
     async function loadDashboardData() {
       const csvUrl = dashboardConfig.googleSheetCsvUrl.trim();
       document.getElementById("asOfDate").textContent = csvUrl ? "Loading Google Sheet data..." : "Loading dashboard data...";
 
       try {
         if (csvUrl) {
-          dashboardData = buildDashboardDataFromCsv(await fetchText(csvUrl));
+          dashboardData = buildDashboardDataFromCsv(await loadGoogleSheetCsv(csvUrl));
         } else {
           dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
           try {
