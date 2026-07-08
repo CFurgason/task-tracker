@@ -1670,7 +1670,7 @@
       return total;
     }
 
-    function summarizeProjectionRecords(records, projectionFactor) {
+    function summarizeProjectionRecords(records) {
       const actual = {
         calls: records.length,
         appointments: countUniqueIds(records, "appointmentIds", "appointmentCount", "appointment"),
@@ -1679,13 +1679,97 @@
         revenue: sumDedupedRevenue(records)
       };
 
+      return actual;
+    }
+
+    function monthKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function dateInMonthThroughDay(date, key, day) {
+      return monthKey(date) === key && date.getDate() <= day;
+    }
+
+    function average(values) {
+      const validValues = values.filter(value => Number.isFinite(value));
+      return validValues.length
+        ? validValues.reduce((sum, value) => sum + value, 0) / validValues.length
+        : 0;
+    }
+
+    function metricRatesByCall(records, monthKeys) {
+      return {
+        appointments: average(monthKeys.map(key => {
+          const monthRecords = records.filter(record => monthKey(record.date) === key);
+          const monthActual = summarizeProjectionRecords(monthRecords);
+          return monthActual.calls ? monthActual.appointments / monthActual.calls : NaN;
+        })),
+        openedRos: average(monthKeys.map(key => {
+          const monthRecords = records.filter(record => monthKey(record.date) === key);
+          const monthActual = summarizeProjectionRecords(monthRecords);
+          return monthActual.calls ? monthActual.openedRos / monthActual.calls : NaN;
+        })),
+        postedRos: average(monthKeys.map(key => {
+          const monthRecords = records.filter(record => monthKey(record.date) === key);
+          const monthActual = summarizeProjectionRecords(monthRecords);
+          return monthActual.calls ? monthActual.postedRos / monthActual.calls : NaN;
+        })),
+        revenue: average(monthKeys.map(key => {
+          const monthRecords = records.filter(record => monthKey(record.date) === key);
+          const monthActual = summarizeProjectionRecords(monthRecords);
+          return monthActual.calls ? monthActual.revenue / monthActual.calls : NaN;
+        }))
+      };
+    }
+
+    function historicalCallPace(records, currentMonthKey, elapsedDays, fallbackPace) {
+      const priorMonthKeys = [...new Set(records
+        .map(record => monthKey(record.date))
+        .filter(key => key < currentMonthKey))]
+        .sort()
+        .slice(-2);
+
+      const pace = average(priorMonthKeys.map(key => {
+        const monthRecords = records.filter(record => monthKey(record.date) === key);
+        const elapsedRecords = monthRecords.filter(record => dateInMonthThroughDay(record.date, key, elapsedDays));
+        return monthRecords.length ? elapsedRecords.length / monthRecords.length : NaN;
+      }));
+
+      return {
+        pace: pace || fallbackPace,
+        priorMonthKeys
+      };
+    }
+
+    function projectStore(records, currentRecords, historicalMonthKeys, callPace) {
+      const actual = summarizeProjectionRecords(currentRecords);
+      const fallbackRates = actual.calls ? {
+        appointments: actual.appointments / actual.calls,
+        openedRos: actual.openedRos / actual.calls,
+        postedRos: actual.postedRos / actual.calls,
+        revenue: actual.revenue / actual.calls
+      } : {
+        appointments: 0,
+        openedRos: 0,
+        postedRos: 0,
+        revenue: 0
+      };
+      const historicalRates = metricRatesByCall(records, historicalMonthKeys);
+      const rates = {
+        appointments: historicalRates.appointments || fallbackRates.appointments,
+        openedRos: historicalRates.openedRos || fallbackRates.openedRos,
+        postedRos: historicalRates.postedRos || fallbackRates.postedRos,
+        revenue: historicalRates.revenue || fallbackRates.revenue
+      };
+      const projectedCalls = callPace ? actual.calls / callPace : actual.calls;
+
       return {
         ...actual,
-        projectedCalls: actual.calls * projectionFactor,
-        projectedAppointments: actual.appointments * projectionFactor,
-        projectedOpenedRos: actual.openedRos * projectionFactor,
-        projectedPostedRos: actual.postedRos * projectionFactor,
-        projectedRevenue: actual.revenue * projectionFactor
+        projectedCalls,
+        projectedAppointments: projectedCalls * rates.appointments,
+        projectedOpenedRos: projectedCalls * rates.openedRos,
+        projectedPostedRos: projectedCalls * rates.postedRos,
+        projectedRevenue: projectedCalls * rates.revenue
       };
     }
 
@@ -1709,18 +1793,56 @@
       const monthEnd = new Date(asOfDate.getFullYear(), asOfDate.getMonth() + 1, 0);
       const elapsedDays = asOfDate.getDate();
       const daysInMonth = monthEnd.getDate();
-      const projectionFactor = elapsedDays ? daysInMonth / elapsedDays : 1;
       const selectedProjectionShop = projectionShopFilter.value;
-      const monthRows = rawTaskRows
+      const projectionRows = rawTaskRows
         .filter(row => !dashboardConfig.excludedTasks.has(row.task))
+        .filter(row => row.date <= asOfDate);
+      const currentMonthKey = monthKey(asOfDate);
+      const fallbackPace = elapsedDays ? elapsedDays / daysInMonth : 1;
+      const { pace: callPace, priorMonthKeys } = historicalCallPace(projectionRows, currentMonthKey, elapsedDays, fallbackPace);
+      const monthRows = projectionRows
         .filter(row => row.date >= monthStart && row.date <= asOfDate)
         .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
+      const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
+      const shopRows = projectionStores.map(store => {
+        const storeRecords = projectionRows.filter(row => row.shop === store);
+        const storeCurrentRecords = monthRows.filter(row => row.shop === store);
+        return {
+          store,
+          ...projectStore(storeRecords, storeCurrentRecords, priorMonthKeys, callPace)
+        };
+      }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0)
+        .sort((a, b) => b.projectedRevenue - a.projectedRevenue || b.projectedCalls - a.projectedCalls || a.store.localeCompare(b.store));
+      const totals = shopRows.reduce((sum, row) => ({
+        calls: sum.calls + row.calls,
+        appointments: sum.appointments + row.appointments,
+        openedRos: sum.openedRos + row.openedRos,
+        postedRos: sum.postedRos + row.postedRos,
+        revenue: sum.revenue + row.revenue,
+        projectedCalls: sum.projectedCalls + row.projectedCalls,
+        projectedAppointments: sum.projectedAppointments + row.projectedAppointments,
+        projectedOpenedRos: sum.projectedOpenedRos + row.projectedOpenedRos,
+        projectedPostedRos: sum.projectedPostedRos + row.projectedPostedRos,
+        projectedRevenue: sum.projectedRevenue + row.projectedRevenue
+      }), {
+        calls: 0,
+        appointments: 0,
+        openedRos: 0,
+        postedRos: 0,
+        revenue: 0,
+        projectedCalls: 0,
+        projectedAppointments: 0,
+        projectedOpenedRos: 0,
+        projectedPostedRos: 0,
+        projectedRevenue: 0
+      });
 
-      const totals = summarizeProjectionRecords(monthRows, projectionFactor);
       document.getElementById("projectionDateRange").textContent =
         `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
-        `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO counts are deduped by shop and ID before projection.`;
+        priorMonthKeys.length
+          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
+          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
 
       document.getElementById("projectionSummary").innerHTML = [
         renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
@@ -1729,16 +1851,6 @@
         renderProjectionMetric("Projected Posted ROs", totals.postedRos, totals.projectedPostedRos),
         renderProjectionMetric("Projected Revenue", totals.revenue, totals.projectedRevenue, formatCurrency)
       ].join("");
-
-      const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
-      const shopRows = projectionStores.map(store => {
-        const storeRecords = monthRows.filter(row => row.shop === store);
-        return {
-          store,
-          ...summarizeProjectionRecords(storeRecords, projectionFactor)
-        };
-      }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0)
-        .sort((a, b) => b.projectedRevenue - a.projectedRevenue || b.projectedCalls - a.projectedCalls || a.store.localeCompare(b.store));
 
       document.getElementById("projectionRows").innerHTML = shopRows.length ? shopRows.map(row => `
         <tr>
