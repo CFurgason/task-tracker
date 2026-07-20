@@ -1671,6 +1671,24 @@
       return total;
     }
 
+    function sumPostedRoRevenue(records) {
+      const seenPostedRos = new Set();
+      let total = 0;
+
+      records.forEach(record => {
+        if (record.revenue <= 0) return;
+
+        const postedRoIds = record.postedRoIds || [];
+        if (!postedRoIds.length) return;
+
+        const hasNewRo = postedRoIds.some(id => !seenPostedRos.has(`${record.shop}\u0000${id}`));
+        postedRoIds.forEach(id => seenPostedRos.add(`${record.shop}\u0000${id}`));
+        if (hasNewRo) total += record.revenue;
+      });
+
+      return total;
+    }
+
     function dedupeProjectionMonthRecords(records) {
       const seenRoIds = new Set();
 
@@ -1759,35 +1777,51 @@
       };
     }
 
-    function projectStore(records, currentRecords, historicalMonthKeys, callPace) {
+    function historicalMetricPace(records, monthKeys, elapsedDays, metricKey, fallbackPace) {
+      return average(monthKeys.map(key => {
+        const monthRecords = records.filter(record => monthKey(record.date) === key);
+        const elapsedRecords = monthRecords.filter(record => dateInMonthThroughDay(record.date, key, elapsedDays));
+        const monthActual = summarizeProjectionRecords(monthRecords);
+        const elapsedActual = summarizeProjectionRecords(elapsedRecords);
+        const monthValue = metricKey === "postedRoRevenue" ? sumPostedRoRevenue(monthRecords) : monthActual[metricKey];
+        const elapsedValue = metricKey === "postedRoRevenue" ? sumPostedRoRevenue(elapsedRecords) : elapsedActual[metricKey];
+        return monthValue ? elapsedValue / monthValue : NaN;
+      })) || fallbackPace;
+    }
+
+    function projectByPace(actualValue, pace) {
+      return pace ? actualValue / pace : actualValue;
+    }
+
+    function projectStore(records, currentRecords, historicalMonthKeys, callPace, elapsedDays) {
       const actual = summarizeProjectionRecords(currentRecords);
       const fallbackRates = actual.calls ? {
         appointments: actual.appointments / actual.calls,
         openedRos: actual.openedRos / actual.calls,
-        postedRos: actual.postedRos / actual.calls,
-        revenue: actual.revenue / actual.calls
+        postedRos: actual.postedRos / actual.calls
       } : {
         appointments: 0,
         openedRos: 0,
-        postedRos: 0,
-        revenue: 0
+        postedRos: 0
       };
       const historicalRates = metricRatesByCall(records, historicalMonthKeys);
       const rates = {
         appointments: historicalRates.appointments || fallbackRates.appointments,
         openedRos: historicalRates.openedRos || fallbackRates.openedRos,
-        postedRos: historicalRates.postedRos || fallbackRates.postedRos,
-        revenue: historicalRates.revenue || fallbackRates.revenue
+        postedRos: historicalRates.postedRos || fallbackRates.postedRos
       };
       const projectedCalls = callPace ? actual.calls / callPace : actual.calls;
+      const postedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "postedRos", callPace);
+      const revenuePace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "postedRoRevenue", postedRoPace);
+      const postedRoRevenue = sumPostedRoRevenue(currentRecords);
 
       return {
         ...actual,
         projectedCalls,
         projectedAppointments: projectedCalls * rates.appointments,
         projectedOpenedRos: projectedCalls * rates.openedRos,
-        projectedPostedRos: projectedCalls * rates.postedRos,
-        projectedRevenue: projectedCalls * rates.revenue
+        projectedPostedRos: projectByPace(actual.postedRos, postedRoPace),
+        projectedRevenue: projectByPace(postedRoRevenue, revenuePace)
       };
     }
 
@@ -1830,7 +1864,7 @@
         const storeCurrentRecords = dedupedMonthRows.filter(row => row.shop === store);
         return {
           store,
-          ...projectStore(storeRecords, storeCurrentRecords, priorMonthKeys, callPace)
+          ...projectStore(storeRecords, storeCurrentRecords, priorMonthKeys, callPace, elapsedDays)
         };
       }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0)
         .sort((a, b) => b.projectedRevenue - a.projectedRevenue || b.projectedCalls - a.projectedCalls || a.store.localeCompare(b.store));
@@ -1862,8 +1896,8 @@
         `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
         priorMonthKeys.length
-          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
-          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Current-month projection rows with RO IDs are deduped by shop and RO ID. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
+          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates for appointments and opened ROs. Posted ROs and revenue are projected from current-month actuals using their own historical month-to-date pace. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
+          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Posted ROs and revenue are projected from current-month actuals. Current-month projection rows with RO IDs are deduped by shop and RO ID. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
 
       document.getElementById("projectionSummary").innerHTML = [
         renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
