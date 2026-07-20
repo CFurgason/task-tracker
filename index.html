@@ -1756,11 +1756,9 @@
       const appointmentPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "appointments", callPace);
       const openedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "openedRos", callPace);
       const postedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "postedRos", callPace);
-      const revenuePace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "revenue", postedRoPace);
       const projectedAppointments = Math.max(actual.appointments, projectByPace(actual.appointments, appointmentPace));
       const projectedOpenedRos = Math.max(actual.openedRos, projectByPace(actual.openedRos, openedRoPace));
       const projectedPostedRos = Math.max(actual.postedRos, projectByPace(actual.postedRos, postedRoPace));
-      const projectedRevenue = Math.max(actual.revenue, projectByPace(actual.revenue, revenuePace));
 
       return {
         ...actual,
@@ -1768,7 +1766,7 @@
         projectedAppointments,
         projectedOpenedRos,
         projectedPostedRos,
-        projectedRevenue
+        projectedRevenue: actual.revenue
       };
     }
 
@@ -1806,6 +1804,8 @@
         .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
       const dedupedMonthRows = dedupeProjectionMonthRecords(monthRows);
       const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
+      const scopedHistoricalProjectionRows = historicalProjectionRows
+        .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
       const shopRows = projectionStores.map(store => {
         const storeRecords = historicalProjectionRows.filter(row => row.shop === store);
         const storeCurrentRecords = dedupedMonthRows.filter(row => row.shop === store);
@@ -1813,7 +1813,16 @@
           store,
           ...projectStore(storeRecords, storeCurrentRecords, priorMonthKeys, callPace, elapsedDays)
         };
-      }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0)
+      }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0);
+      const actualRevenueTotal = shopRows.reduce((sum, row) => sum + row.revenue, 0);
+      const revenuePace = historicalMetricPace(scopedHistoricalProjectionRows, priorMonthKeys, elapsedDays, "revenue", callPace);
+      const projectedRevenueTotal = Math.max(actualRevenueTotal, projectByPace(actualRevenueTotal, revenuePace));
+      shopRows.forEach(row => {
+        row.projectedRevenue = actualRevenueTotal
+          ? projectedRevenueTotal * (row.revenue / actualRevenueTotal)
+          : 0;
+      });
+      shopRows
         .sort((a, b) => b.projectedRevenue - a.projectedRevenue || b.projectedCalls - a.projectedCalls || a.store.localeCompare(b.store));
       const totals = shopRows.reduce((sum, row) => ({
         calls: sum.calls + row.calls,
@@ -1843,8 +1852,8 @@
         `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
         priorMonthKeys.length
-          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual using that metric's average month-to-date pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}; current actuals are used as the minimum. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
-          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual; current actuals are used as the minimum. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
+          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual using that metric's average month-to-date pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}; current actuals are used as the minimum. Revenue is projected at the selected total level, then allocated to shops by current revenue share. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
+          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual; current actuals are used as the minimum. Revenue is projected at the selected total level, then allocated to shops by current revenue share. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
 
       document.getElementById("projectionSummary").innerHTML = [
         renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
