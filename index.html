@@ -745,7 +745,8 @@
         || (window.TASK_TRACKER_GOOGLE_SHEET_CSV_URL || ""),
       fallbackJsonUrl: "task-tracker-data.json",
       excludedShops: new Set(["Redwood General Tire"]),
-      excludedTasks: new Set(["Welcome New Customer", "Welcome New Vehicle"])
+      excludedTasks: new Set(["Welcome New Customer", "Welcome New Vehicle"]),
+      historicalProjectionExcludedTasks: new Set(["Declined Service Reminder", "Slow Day Trigger"])
     };
 
     let dashboardData = null;
@@ -1798,14 +1799,16 @@
         .filter(row => !dashboardConfig.excludedTasks.has(row.task))
         .filter(row => row.date <= asOfDate);
       const currentMonthKey = monthKey(asOfDate);
+      const historicalProjectionRows = projectionRows
+        .filter(row => monthKey(row.date) >= currentMonthKey || !dashboardConfig.historicalProjectionExcludedTasks.has(row.task));
       const fallbackPace = elapsedDays ? elapsedDays / daysInMonth : 1;
-      const { pace: callPace, priorMonthKeys } = historicalCallPace(projectionRows, currentMonthKey, elapsedDays, fallbackPace);
+      const { pace: callPace, priorMonthKeys } = historicalCallPace(historicalProjectionRows, currentMonthKey, elapsedDays, fallbackPace);
       const monthRows = projectionRows
         .filter(row => row.date >= monthStart && row.date <= asOfDate)
         .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
       const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
       const shopRows = projectionStores.map(store => {
-        const storeRecords = projectionRows.filter(row => row.shop === store);
+        const storeRecords = historicalProjectionRows.filter(row => row.shop === store);
         const storeCurrentRecords = monthRows.filter(row => row.shop === store);
         return {
           store,
@@ -1841,7 +1844,7 @@
         `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
         priorMonthKeys.length
-          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
+          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
           : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
 
       document.getElementById("projectionSummary").innerHTML = [
