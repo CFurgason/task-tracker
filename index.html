@@ -1715,31 +1715,6 @@
         : 0;
     }
 
-    function metricRatesByCall(records, monthKeys) {
-      return {
-        appointments: average(monthKeys.map(key => {
-          const monthRecords = records.filter(record => monthKey(record.date) === key);
-          const monthActual = summarizeProjectionRecords(monthRecords);
-          return monthActual.calls ? monthActual.appointments / monthActual.calls : NaN;
-        })),
-        openedRos: average(monthKeys.map(key => {
-          const monthRecords = records.filter(record => monthKey(record.date) === key);
-          const monthActual = summarizeProjectionRecords(monthRecords);
-          return monthActual.calls ? monthActual.openedRos / monthActual.calls : NaN;
-        })),
-        postedRos: average(monthKeys.map(key => {
-          const monthRecords = records.filter(record => monthKey(record.date) === key);
-          const monthActual = summarizeProjectionRecords(monthRecords);
-          return monthActual.calls ? monthActual.postedRos / monthActual.calls : NaN;
-        })),
-        revenue: average(monthKeys.map(key => {
-          const monthRecords = records.filter(record => monthKey(record.date) === key);
-          const monthActual = summarizeProjectionRecords(monthRecords);
-          return monthActual.calls ? monthActual.revenue / monthActual.calls : NaN;
-        }))
-      };
-    }
-
     function historicalCallPace(records, currentMonthKey, elapsedDays, fallbackPace) {
       const priorMonthKeys = [...new Set(records
         .map(record => monthKey(record.date))
@@ -1777,26 +1752,13 @@
 
     function projectStore(records, currentRecords, historicalMonthKeys, callPace, elapsedDays) {
       const actual = summarizeProjectionRecords(currentRecords);
-      const fallbackRates = actual.calls ? {
-        appointments: actual.appointments / actual.calls,
-        openedRos: actual.openedRos / actual.calls,
-        postedRos: actual.postedRos / actual.calls
-      } : {
-        appointments: 0,
-        openedRos: 0,
-        postedRos: 0
-      };
-      const historicalRates = metricRatesByCall(records, historicalMonthKeys);
-      const rates = {
-        appointments: historicalRates.appointments || fallbackRates.appointments,
-        openedRos: historicalRates.openedRos || fallbackRates.openedRos,
-        postedRos: historicalRates.postedRos || fallbackRates.postedRos
-      };
       const projectedCalls = callPace ? actual.calls / callPace : actual.calls;
+      const appointmentPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "appointments", callPace);
+      const openedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "openedRos", callPace);
       const postedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "postedRos", callPace);
       const revenuePace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "revenue", postedRoPace);
-      const projectedAppointments = Math.max(actual.appointments, projectedCalls * rates.appointments);
-      const projectedOpenedRos = Math.max(actual.openedRos, projectedCalls * rates.openedRos);
+      const projectedAppointments = Math.max(actual.appointments, projectByPace(actual.appointments, appointmentPace));
+      const projectedOpenedRos = Math.max(actual.openedRos, projectByPace(actual.openedRos, openedRoPace));
       const projectedPostedRos = Math.max(actual.postedRos, projectByPace(actual.postedRos, postedRoPace));
       const projectedRevenue = Math.max(actual.revenue, projectByPace(actual.revenue, revenuePace));
 
@@ -1881,8 +1843,8 @@
         `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
         priorMonthKeys.length
-          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates for appointments and opened ROs. Posted ROs and revenue are projected from current-month actuals using their own historical month-to-date pace. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
-          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Posted ROs and revenue are projected from current-month actuals. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
+          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual using that metric's average month-to-date pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}; current actuals are used as the minimum. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
+          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual; current actuals are used as the minimum. Current-month projection rows with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
 
       document.getElementById("projectionSummary").innerHTML = [
         renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
