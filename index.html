@@ -1671,6 +1671,23 @@
       return total;
     }
 
+    function dedupeProjectionMonthRecords(records) {
+      const seenRoIds = new Set();
+
+      return records.filter(record => {
+        const roIds = [
+          ...(record.openedRoIds || []),
+          ...(record.postedRoIds || [])
+        ];
+
+        if (!roIds.length) return true;
+
+        const hasNewRo = roIds.some(id => !seenRoIds.has(`${record.shop}\u0000${id}`));
+        roIds.forEach(id => seenRoIds.add(`${record.shop}\u0000${id}`));
+        return hasNewRo;
+      });
+    }
+
     function summarizeProjectionRecords(records) {
       const actual = {
         calls: records.length,
@@ -1806,10 +1823,11 @@
       const monthRows = projectionRows
         .filter(row => row.date >= monthStart && row.date <= asOfDate)
         .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
+      const dedupedMonthRows = dedupeProjectionMonthRecords(monthRows);
       const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
       const shopRows = projectionStores.map(store => {
         const storeRecords = historicalProjectionRows.filter(row => row.shop === store);
-        const storeCurrentRecords = monthRows.filter(row => row.shop === store);
+        const storeCurrentRecords = dedupedMonthRows.filter(row => row.shop === store);
         return {
           store,
           ...projectStore(storeRecords, storeCurrentRecords, priorMonthKeys, callPace)
@@ -1844,8 +1862,8 @@
         `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
       document.getElementById("projectionNote").textContent =
         priorMonthKeys.length
-          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
-          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
+          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}, a ${(callPace * 100).toFixed(1)}% historical call pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}, and each shop's average historical per-call rates. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Current-month projection rows with RO IDs are deduped by shop and RO ID. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
+          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Current-month projection rows with RO IDs are deduped by shop and RO ID. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
 
       document.getElementById("projectionSummary").innerHTML = [
         renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
