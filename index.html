@@ -467,49 +467,6 @@
       align-self: start;
     }
 
-    .projection-summary {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(150px, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-
-    .metric-card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      padding: 15px;
-    }
-
-    .metric-label {
-      color: var(--muted);
-      font-size: 0.76rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    .metric-value {
-      font-size: 1.55rem;
-      font-weight: 800;
-      line-height: 1.1;
-    }
-
-    .metric-subvalue {
-      color: var(--muted);
-      font-size: 0.82rem;
-      margin-top: 6px;
-      line-height: 1.3;
-    }
-
-    .projection-note {
-      color: var(--muted);
-      font-size: 0.88rem;
-      line-height: 1.4;
-      padding: 0 18px 14px;
-    }
-
     .urgent-groups table {
       min-width: 0;
     }
@@ -586,7 +543,6 @@
       .controls,
       .dashboard-grid,
       .all-shop-alert,
-      .projection-summary,
       .urgent-groups {
         grid-template-columns: 1fr;
       }
@@ -654,12 +610,6 @@
             <option value="All">All tasks</option>
           </select>
         </div>
-        <div class="control control-hidden" id="projectionShopControl">
-          <label for="projectionShopFilter">Projection shop</label>
-          <select id="projectionShopFilter">
-            <option value="All">All shops</option>
-          </select>
-        </div>
       </section>
 
       <div id="storeDashboard" class="view">
@@ -710,31 +660,6 @@
         <section class="urgent-groups" id="urgentGroups" aria-label="Most concerning call drops grouped by task"></section>
       </div>
 
-      <div id="currentMonthProjection" class="view">
-        <section class="projection-summary" id="projectionSummary" aria-label="Current month projection summary"></section>
-        <section class="panel">
-          <div class="panel-head">
-            <h2 class="panel-title">Current Month Projection</h2>
-            <span class="panel-note" id="projectionDateRange"></span>
-          </div>
-          <p class="projection-note" id="projectionNote"></p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Shop</th>
-                  <th class="num">Projected Calls</th>
-                  <th class="num">Projected Appointments</th>
-                  <th class="num">Projected Opened ROs</th>
-                  <th class="num">Projected Posted ROs</th>
-                  <th class="num">Projected Revenue</th>
-                </tr>
-              </thead>
-              <tbody id="projectionRows"></tbody>
-            </table>
-          </div>
-        </section>
-      </div>
     </main>
   </div>
 
@@ -745,19 +670,15 @@
         || (window.TASK_TRACKER_GOOGLE_SHEET_CSV_URL || ""),
       fallbackJsonUrl: "task-tracker-data.json",
       excludedShops: new Set(["Redwood General Tire"]),
-      excludedTasks: new Set(["Welcome New Customer", "Welcome New Vehicle"]),
-      historicalProjectionExcludedTasks: new Set(["Declined Service Reminder", "Slow Day Trigger"])
+      excludedTasks: new Set(["Welcome New Customer", "Welcome New Vehicle"])
     };
 
     let dashboardData = null;
     let rows = [];
-    let rawTaskRows = [];
 
     const viewSelector = document.getElementById("viewSelector");
     const taskFilter = document.getElementById("taskFilter");
     const taskControl = document.getElementById("taskControl");
-    const projectionShopFilter = document.getElementById("projectionShopFilter");
-    const projectionShopControl = document.getElementById("projectionShopControl");
 
     function parseCsv(text) {
       const rows = [];
@@ -1036,11 +957,6 @@
           dashboardData = buildDashboardDataFromCsv(await loadGoogleSheetCsv(csvUrl));
         } else {
           dashboardData = await (await fetch(dashboardConfig.fallbackJsonUrl, { cache: "no-store" })).json();
-          try {
-            rawTaskRows = parseRawTaskRows(await fetchText("codex_task_tracker.csv"));
-          } catch (rawError) {
-            console.warn("Raw CSV unavailable for current month projection.", rawError);
-          }
         }
       } catch (error) {
         console.error(error);
@@ -1048,7 +964,6 @@
         throw new Error(`Google Sheet failed: ${error.message}. Check google-sheets-config.js and confirm the published CSV URL is correct.`);
       }
 
-      rawTaskRows = rawTaskRows.length ? rawTaskRows : (dashboardData.rawRows || []);
       rows = dashboardData.rows.filter(row => !dashboardConfig.excludedTasks.has(row.task));
       initializeControls();
       renderDataDate();
@@ -1058,15 +973,12 @@
     function initializeControls() {
       viewSelector.innerHTML = `
         <option value="urgentDrops">Urgent Drops</option>
-        <option value="currentMonthProjection">Current Month Projection</option>
       `;
       taskFilter.innerHTML = '<option value="All">All Tasks</option>';
-      projectionShopFilter.innerHTML = '<option value="All">All Shops</option>';
       addOptions(viewSelector, uniqueValues("store"));
       addOptions(taskFilter, uniqueValues("task"));
-      addOptions(projectionShopFilter, uniqueValues("store"));
 
-      [viewSelector, taskFilter, projectionShopFilter].forEach(control => {
+      [viewSelector, taskFilter].forEach(control => {
         control.addEventListener("input", render);
         control.addEventListener("change", render);
       });
@@ -1119,7 +1031,7 @@
     }
 
     function isShopPage() {
-      return !["urgentDrops", "currentMonthProjection"].includes(viewSelector.value);
+      return viewSelector.value !== "urgentDrops";
     }
 
     function selectedStoreRows() {
@@ -1614,279 +1526,6 @@
       `;
     }
 
-    function emptyProjection() {
-      document.getElementById("projectionSummary").innerHTML = "";
-      document.getElementById("projectionDateRange").textContent = "";
-      document.getElementById("projectionNote").textContent =
-        "Current month projections require raw CSV rows with appointment and RO ID columns.";
-      document.getElementById("projectionRows").innerHTML = `
-        <tr>
-          <td colspan="6">Raw CSV data is not available for this dashboard load.</td>
-        </tr>
-      `;
-    }
-
-    function countUniqueIds(records, idKey, countKey, prefix) {
-      const seen = new Set();
-
-      records.forEach(record => {
-        const ids = record[idKey] || [];
-        if (ids.length) {
-          ids.forEach(id => seen.add(`${record.shop}\u0000${id}`));
-          return;
-        }
-
-        const count = Math.max(0, Math.round(numericValue(record[countKey])));
-        for (let index = 0; index < count; index += 1) {
-          seen.add(`${record.shop}\u0000${prefix}\u0000${record.taskId || record.rowIndex}\u0000${index}`);
-        }
-      });
-
-      return seen.size;
-    }
-
-    function sumDedupedRevenue(records) {
-      const seenPostedRos = new Set();
-      const seenFallbackRows = new Set();
-      let total = 0;
-
-      records.forEach(record => {
-        if (record.revenue <= 0) return;
-
-        const postedRoIds = record.postedRoIds || [];
-        if (postedRoIds.length) {
-          const hasNewRo = postedRoIds.some(id => !seenPostedRos.has(`${record.shop}\u0000${id}`));
-          postedRoIds.forEach(id => seenPostedRos.add(`${record.shop}\u0000${id}`));
-          if (hasNewRo) total += record.revenue;
-          return;
-        }
-
-        const fallbackKey = `${record.shop}\u0000${record.taskId || record.rowIndex}`;
-        if (!seenFallbackRows.has(fallbackKey)) {
-          seenFallbackRows.add(fallbackKey);
-          total += record.revenue;
-        }
-      });
-
-      return total;
-    }
-
-    function countDedupedProjectionCalls(records) {
-      const seenRoIds = new Set();
-      let total = 0;
-
-      records.forEach(record => {
-        const roIds = [
-          ...(record.openedRoIds || []),
-          ...(record.postedRoIds || [])
-        ];
-
-        if (!roIds.length) {
-          total += 1;
-          return;
-        }
-
-        const hasNewRo = roIds.some(id => !seenRoIds.has(`${record.shop}\u0000${id}`));
-        roIds.forEach(id => seenRoIds.add(`${record.shop}\u0000${id}`));
-        if (hasNewRo) total += 1;
-      });
-
-      return total;
-    }
-
-    function summarizeProjectionRecords(records) {
-      const actual = {
-        calls: countDedupedProjectionCalls(records),
-        appointments: countUniqueIds(records, "appointmentIds", "appointmentCount", "appointment"),
-        openedRos: countUniqueIds(records, "openedRoIds", "openedRoCount", "openedRo"),
-        postedRos: countUniqueIds(records, "postedRoIds", "postedRoCount", "postedRo"),
-        revenue: sumDedupedRevenue(records)
-      };
-
-      return actual;
-    }
-
-    function monthKey(date) {
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    }
-
-    function dateInMonthThroughDay(date, key, day) {
-      return monthKey(date) === key && date.getDate() <= day;
-    }
-
-    function average(values) {
-      const validValues = values.filter(value => Number.isFinite(value));
-      return validValues.length
-        ? validValues.reduce((sum, value) => sum + value, 0) / validValues.length
-        : 0;
-    }
-
-    function historicalCallPace(records, currentMonthKey, elapsedDays, fallbackPace) {
-      const priorMonthKeys = [...new Set(records
-        .map(record => monthKey(record.date))
-        .filter(key => key < currentMonthKey))]
-        .sort()
-        .slice(-2);
-
-      const pace = average(priorMonthKeys.map(key => {
-        const monthRecords = records.filter(record => monthKey(record.date) === key);
-        const elapsedRecords = monthRecords.filter(record => dateInMonthThroughDay(record.date, key, elapsedDays));
-        const monthCalls = countDedupedProjectionCalls(monthRecords);
-        const elapsedCalls = countDedupedProjectionCalls(elapsedRecords);
-        return monthCalls ? elapsedCalls / monthCalls : NaN;
-      }));
-
-      return {
-        pace: pace || fallbackPace,
-        priorMonthKeys
-      };
-    }
-
-    function historicalMetricPace(records, monthKeys, elapsedDays, metricKey, fallbackPace) {
-      return average(monthKeys.map(key => {
-        const monthRecords = records.filter(record => monthKey(record.date) === key);
-        const elapsedRecords = monthRecords.filter(record => dateInMonthThroughDay(record.date, key, elapsedDays));
-        const monthActual = summarizeProjectionRecords(monthRecords);
-        const elapsedActual = summarizeProjectionRecords(elapsedRecords);
-        const monthValue = monthActual[metricKey];
-        const elapsedValue = elapsedActual[metricKey];
-        return monthValue ? elapsedValue / monthValue : NaN;
-      })) || fallbackPace;
-    }
-
-    function projectByPace(actualValue, pace) {
-      return pace ? actualValue / pace : actualValue;
-    }
-
-    function projectStore(records, currentRecords, historicalMonthKeys, callPace, elapsedDays) {
-      const actual = summarizeProjectionRecords(currentRecords);
-      const projectedCalls = callPace ? actual.calls / callPace : actual.calls;
-      const appointmentPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "appointments", callPace);
-      const openedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "openedRos", callPace);
-      const postedRoPace = historicalMetricPace(records, historicalMonthKeys, elapsedDays, "postedRos", callPace);
-      const projectedAppointments = Math.max(actual.appointments, projectByPace(actual.appointments, appointmentPace));
-      const projectedOpenedRos = Math.max(actual.openedRos, projectByPace(actual.openedRos, openedRoPace));
-      const projectedPostedRos = Math.max(actual.postedRos, projectByPace(actual.postedRos, postedRoPace));
-
-      return {
-        ...actual,
-        projectedCalls,
-        projectedAppointments,
-        projectedOpenedRos,
-        projectedPostedRos,
-        projectedRevenue: actual.revenue
-      };
-    }
-
-    function renderProjectionMetric(label, actual, projected, formatter = formatNumber) {
-      return `
-        <article class="metric-card">
-          <div class="metric-label">${label}</div>
-          <div class="metric-value">${formatter(Math.round(projected))}</div>
-        </article>
-      `;
-    }
-
-    function renderCurrentMonthProjection() {
-      if (!rawTaskRows.length) {
-        emptyProjection();
-        return;
-      }
-
-      const asOfDate = new Date(Math.max(...rawTaskRows.map(row => row.date.getTime())));
-      const monthStart = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 1);
-      const monthEnd = new Date(asOfDate.getFullYear(), asOfDate.getMonth() + 1, 0);
-      const elapsedDays = asOfDate.getDate();
-      const daysInMonth = monthEnd.getDate();
-      const selectedProjectionShop = projectionShopFilter.value;
-      const projectionRows = rawTaskRows
-        .filter(row => !dashboardConfig.excludedTasks.has(row.task))
-        .filter(row => row.date <= asOfDate);
-      const currentMonthKey = monthKey(asOfDate);
-      const historicalProjectionRows = projectionRows
-        .filter(row => monthKey(row.date) >= currentMonthKey || !dashboardConfig.historicalProjectionExcludedTasks.has(row.task));
-      const fallbackPace = elapsedDays ? elapsedDays / daysInMonth : 1;
-      const { pace: callPace, priorMonthKeys } = historicalCallPace(historicalProjectionRows, currentMonthKey, elapsedDays, fallbackPace);
-      const monthRows = projectionRows
-        .filter(row => row.date >= monthStart && row.date <= asOfDate)
-        .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
-      const projectionStores = selectedProjectionShop === "All" ? uniqueValues("store") : [selectedProjectionShop];
-      const scopedHistoricalProjectionRows = historicalProjectionRows
-        .filter(row => selectedProjectionShop === "All" || row.shop === selectedProjectionShop);
-      const shopRows = projectionStores.map(store => {
-        const storeRecords = historicalProjectionRows.filter(row => row.shop === store);
-        const storeCurrentRecords = monthRows.filter(row => row.shop === store);
-        return {
-          store,
-          ...projectStore(storeRecords, storeCurrentRecords, priorMonthKeys, callPace, elapsedDays)
-        };
-      }).filter(row => row.calls > 0 || row.appointments > 0 || row.openedRos > 0 || row.postedRos > 0 || row.revenue > 0);
-      const actualRevenueTotal = sumDedupedRevenue(monthRows);
-      const revenuePace = Math.min(1, historicalMetricPace(scopedHistoricalProjectionRows, priorMonthKeys, elapsedDays, "revenue", callPace));
-      const projectedRevenueTotal = Math.max(actualRevenueTotal, projectByPace(actualRevenueTotal, revenuePace));
-      const revenueAllocationTotal = shopRows.reduce((sum, row) => sum + row.revenue, 0);
-      shopRows.forEach(row => {
-        row.projectedRevenue = revenueAllocationTotal
-          ? projectedRevenueTotal * (row.revenue / revenueAllocationTotal)
-          : 0;
-      });
-      shopRows
-        .sort((a, b) => b.projectedRevenue - a.projectedRevenue || b.projectedCalls - a.projectedCalls || a.store.localeCompare(b.store));
-      const totals = shopRows.reduce((sum, row) => ({
-        calls: sum.calls + row.calls,
-        appointments: sum.appointments + row.appointments,
-        openedRos: sum.openedRos + row.openedRos,
-        postedRos: sum.postedRos + row.postedRos,
-        revenue: sum.revenue + row.revenue,
-        projectedCalls: sum.projectedCalls + row.projectedCalls,
-        projectedAppointments: sum.projectedAppointments + row.projectedAppointments,
-        projectedOpenedRos: sum.projectedOpenedRos + row.projectedOpenedRos,
-        projectedPostedRos: sum.projectedPostedRos + row.projectedPostedRos,
-        projectedRevenue: sum.projectedRevenue + row.projectedRevenue
-      }), {
-        calls: 0,
-        appointments: 0,
-        openedRos: 0,
-        postedRos: 0,
-        revenue: 0,
-        projectedCalls: 0,
-        projectedAppointments: 0,
-        projectedOpenedRos: 0,
-        projectedPostedRos: 0,
-        projectedRevenue: 0
-      });
-
-      document.getElementById("projectionDateRange").textContent =
-        `${selectedProjectionShop === "All" ? "All shops" : selectedProjectionShop}: ${formatDashboardDate(isoDate(monthStart))} through ${formatDashboardDate(isoDate(asOfDate))}`;
-      document.getElementById("projectionNote").textContent =
-        priorMonthKeys.length
-          ? `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual using that metric's average month-to-date pace from the prior ${priorMonthKeys.length} complete month${priorMonthKeys.length === 1 ? "" : "s"}; current actuals are used as the minimum. Revenue is projected at the selected total level with pace capped at 100%, then allocated to shops by current revenue share. Declined Service Reminder and Slow Day Trigger are excluded from historical projection inputs. Calls with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`
-          : `Projection uses ${elapsedDays} elapsed day${elapsedDays === 1 ? "" : "s"} of ${daysInMonth}. Each metric is projected from the current-month actual; current actuals are used as the minimum. Revenue is projected at the selected total level with pace capped at 100%, then allocated to shops by current revenue share. Calls with RO IDs are deduped by shop and RO ID. Revenue is deduped by posted RO ID when available. Appointment, opened RO, and posted RO counts are deduped by shop and ID.`;
-
-      document.getElementById("projectionSummary").innerHTML = [
-        renderProjectionMetric("Projected Calls", totals.calls, totals.projectedCalls),
-        renderProjectionMetric("Projected Appointments", totals.appointments, totals.projectedAppointments),
-        renderProjectionMetric("Projected Opened ROs", totals.openedRos, totals.projectedOpenedRos),
-        renderProjectionMetric("Projected Posted ROs", totals.postedRos, totals.projectedPostedRos),
-        renderProjectionMetric("Projected Revenue", totals.revenue, totals.projectedRevenue, formatCurrency)
-      ].join("");
-
-      document.getElementById("projectionRows").innerHTML = shopRows.length ? shopRows.map(row => `
-        <tr>
-          <td>${row.store}</td>
-          <td class="num">${formatNumber(Math.round(row.projectedCalls))}</td>
-          <td class="num">${formatNumber(Math.round(row.projectedAppointments))}</td>
-          <td class="num">${formatNumber(Math.round(row.projectedOpenedRos))}</td>
-          <td class="num">${formatNumber(Math.round(row.projectedPostedRos))}</td>
-          <td class="num">${formatCurrency(row.projectedRevenue)}</td>
-        </tr>
-      `).join("") : `
-        <tr>
-          <td colspan="6">No current month rows are available through ${formatDashboardDate(isoDate(asOfDate))}.</td>
-        </tr>
-      `;
-    }
-
     function setActiveView() {
       const shopPage = isShopPage();
       document.querySelectorAll(".view").forEach(view => {
@@ -1894,7 +1533,6 @@
         view.classList.toggle("view-active", view.id === activeViewId);
       });
       taskControl.classList.toggle("control-hidden", !shopPage);
-      projectionShopControl.classList.toggle("control-hidden", viewSelector.value !== "currentMonthProjection");
     }
 
     function syncWarningPanelHeight() {
@@ -1917,7 +1555,6 @@
       renderTable(storeData);
       renderAllShopAlert();
       renderUrgentDrops();
-      renderCurrentMonthProjection();
       setActiveView();
       syncWarningPanelHeight();
     }
