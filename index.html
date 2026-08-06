@@ -670,7 +670,13 @@
         || (window.TASK_TRACKER_GOOGLE_SHEET_CSV_URL || ""),
       fallbackJsonUrl: "task-tracker-data.json",
       excludedShops: new Set(["Redwood General Tire"]),
-      excludedTasks: new Set(["Welcome New Customer", "Welcome New Vehicle"])
+      excludedTasks: new Set([
+        "Welcome New Customer",
+        "Welcome New Vehicle",
+        "Retention Re-Engage",
+        "Service Overdue",
+        "Warranty Inspection"
+      ])
     };
 
     let dashboardData = null;
@@ -794,7 +800,13 @@
             revenue: parseMoney(item["Revenue Total $"])
           };
         })
-        .filter(item => item.shop && item.task && item.date && !dashboardConfig.excludedShops.has(item.shop));
+        .filter(item =>
+          item.shop &&
+          item.task &&
+          item.date &&
+          !dashboardConfig.excludedShops.has(item.shop) &&
+          !dashboardConfig.excludedTasks.has(item.task)
+        );
     }
 
     function buildDashboardDataFromCsv(csvText) {
@@ -1438,7 +1450,6 @@
     function isBottomUrgentTask(task) {
       return task.includes("BG") ||
         task === "Next Day Satisfaction" ||
-        task === "Retention Re-Engage" ||
         task === "Reservation No Show" ||
         task === "Returning Lost Vehicle";
     }
