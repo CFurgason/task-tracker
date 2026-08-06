@@ -675,7 +675,7 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "excluded-tasks-2026-08-06";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "excluded-tasks-2026-08-06b";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -1071,7 +1071,9 @@
     }
 
     function uniqueValues(key) {
-      return [...new Set(rows.map(row => row[key]))].sort();
+      return [...new Set(rows
+        .filter(row => key !== "task" || !isExcludedTask(row.task))
+        .map(row => row[key]))].sort();
     }
 
     function addOptions(select, values) {
@@ -1514,10 +1516,12 @@
     }
 
     function renderUrgentDrops() {
-      const groups = uniqueValues("task").map(task => ({
-        task,
-        drops: getDropRows(rows.filter(row => row.task === task))
-      })).filter(group => group.drops.length > 0)
+      const groups = uniqueValues("task")
+        .filter(task => !isExcludedTask(task))
+        .map(task => ({
+          task,
+          drops: getDropRows(rows.filter(row => row.task === task && !isExcludedTask(row.task)))
+        })).filter(group => group.drops.length > 0)
         .sort(urgentTaskSort);
 
       document.getElementById("urgentGroups").innerHTML = groups.length ? groups.map(group => {
