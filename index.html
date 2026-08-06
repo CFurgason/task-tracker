@@ -93,6 +93,15 @@
       line-height: 1.2;
     }
 
+    .debug-line {
+      display: none;
+      max-width: 1400px;
+      margin: 10px auto 0;
+      padding: 0 28px;
+      color: #dbe7f5;
+      font-size: 0.82rem;
+    }
+
     main {
       max-width: 1400px;
       margin: 0 auto;
@@ -594,6 +603,7 @@
         </div>
         <div class="date-pill" id="asOfDate"></div>
       </div>
+      <div class="debug-line" id="debugLine"></div>
     </header>
 
     <main>
@@ -992,6 +1002,7 @@
 
       rows = dashboardData.rows.filter(row => !isExcludedTask(row.task));
       initializeControls();
+      renderDebugLine();
       renderDataDate();
       render();
     }
@@ -1007,6 +1018,25 @@
       [viewSelector, taskFilter].forEach(control => {
         control.addEventListener("input", render);
         control.addEventListener("change", render);
+      });
+    }
+
+    function renderDebugLine() {
+      if (new URLSearchParams(window.location.search).get("debugTasks") !== "1") return;
+
+      const excludedTasksInLoadedData = dashboardData.rows
+        .filter(row => isExcludedTask(row.task))
+        .map(row => row.task);
+      const debugLine = document.getElementById("debugLine");
+
+      debugLine.style.display = "block";
+      debugLine.textContent = `Version ${window.TASK_TRACKER_DASHBOARD_VERSION}; source rows ${dashboardData.rows.length}; visible rows ${rows.length}; excluded matches ${excludedTasksInLoadedData.length}.`;
+      console.log("Task tracker debug", {
+        version: window.TASK_TRACKER_DASHBOARD_VERSION,
+        sourceRows: dashboardData.rows.length,
+        visibleRows: rows.length,
+        excludedMatches: excludedTasksInLoadedData,
+        visibleTasks: uniqueValues("task")
       });
     }
 
