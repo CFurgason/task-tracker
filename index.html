@@ -665,6 +665,16 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
+    window.TASK_TRACKER_DASHBOARD_VERSION = "excluded-tasks-2026-08-06";
+
+    function normalizeTaskName(value) {
+      return String(value || "")
+        .normalize("NFKC")
+        .replace(/[‐‑‒–—−]/g, "-")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
     const dashboardConfig = {
       googleSheetCsvUrl: new URLSearchParams(window.location.search).get("sheetCsv")
         || (window.TASK_TRACKER_GOOGLE_SHEET_CSV_URL || ""),
@@ -676,7 +686,7 @@
         "Retention Re-Engage",
         "Service Overdue",
         "Warranty Inspection"
-      ])
+      ].map(normalizeTaskName))
     };
 
     let dashboardData = null;
@@ -685,6 +695,10 @@
     const viewSelector = document.getElementById("viewSelector");
     const taskFilter = document.getElementById("taskFilter");
     const taskControl = document.getElementById("taskControl");
+
+    function isExcludedTask(task) {
+      return dashboardConfig.excludedTasks.has(normalizeTaskName(task));
+    }
 
     function parseCsv(text) {
       const rows = [];
@@ -805,7 +819,7 @@
           item.task &&
           item.date &&
           !dashboardConfig.excludedShops.has(item.shop) &&
-          !dashboardConfig.excludedTasks.has(item.task)
+          !isExcludedTask(item.task)
         );
     }
 
@@ -976,7 +990,7 @@
         throw new Error(`Google Sheet failed: ${error.message}. Check google-sheets-config.js and confirm the published CSV URL is correct.`);
       }
 
-      rows = dashboardData.rows.filter(row => !dashboardConfig.excludedTasks.has(row.task));
+      rows = dashboardData.rows.filter(row => !isExcludedTask(row.task));
       initializeControls();
       renderDataDate();
       render();
