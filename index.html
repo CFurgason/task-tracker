@@ -6,6 +6,7 @@
   <title>Task Tracker</title>
   <style>
     :root {
+      --page-max: 2400px;
       --bg: #f5f7fa;
       --panel: #ffffff;
       --text: #172033;
@@ -50,9 +51,10 @@
     }
 
     .header-row {
-      max-width: 1400px;
+      width: 100%;
+      max-width: var(--page-max);
       margin: 0 auto;
-      padding: 0 28px;
+      padding: 0 32px;
       display: flex;
       justify-content: space-between;
       gap: 20px;
@@ -95,17 +97,19 @@
 
     .debug-line {
       display: none;
-      max-width: 1400px;
+      width: 100%;
+      max-width: var(--page-max);
       margin: 10px auto 0;
-      padding: 0 28px;
+      padding: 0 32px;
       color: #dbe7f5;
       font-size: 0.82rem;
     }
 
     main {
-      max-width: 1400px;
+      width: 100%;
+      max-width: var(--page-max);
       margin: 0 auto;
-      padding: 24px 28px 36px;
+      padding: 24px 32px 36px;
     }
 
     .controls {
@@ -469,7 +473,7 @@
     .urgent-groups {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 18px;
+      gap: 20px;
     }
 
     .urgent-groups .panel {
@@ -492,17 +496,17 @@
 
     th,
     td {
-      padding: 11px 12px;
+      padding: 13px 14px;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: middle;
-      font-size: 0.92rem;
+      font-size: 1rem;
     }
 
     th {
       background: #f8fafc;
       color: #475569;
-      font-size: 0.76rem;
+      font-size: 0.82rem;
       text-transform: uppercase;
       letter-spacing: 0;
       white-space: nowrap;
@@ -520,10 +524,10 @@
     .badge {
       display: inline-flex;
       align-items: center;
-      min-height: 24px;
-      padding: 3px 9px;
+      min-height: 26px;
+      padding: 4px 10px;
       border-radius: 999px;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       white-space: nowrap;
     }
@@ -675,7 +679,7 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "excluded-tasks-2026-08-06b";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "wide-layout-2026-08-24";
 
     function normalizeTaskName(value) {
       return String(value || "")
