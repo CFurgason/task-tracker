@@ -499,9 +499,14 @@
     td {
       padding: 13px 14px;
       border-bottom: 1px solid var(--line);
-      text-align: left;
+      text-align: center;
       vertical-align: middle;
       font-size: 26px;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
     }
 
     th {
@@ -518,8 +523,16 @@
     }
 
     .num {
-      text-align: right;
+      text-align: center;
       font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr.row-critical {
+      background: #fff5f4;
+    }
+
+    tbody tr.row-critical:hover {
+      background: #ffecea;
     }
 
     .badge {
@@ -1481,7 +1494,7 @@
         .map(row => {
           const status = getStatus(row);
           return `
-            <tr>
+            <tr class="${status.level === "red" ? "row-critical" : ""}">
               <td>${row.store}</td>
               <td>${row.task}</td>
               <td class="num">${formatNumber(row.current)}</td>
@@ -1535,8 +1548,7 @@
           .map((row, index) => {
             const status = getStatus(row);
             return `
-              <tr>
-                <td>${index + 1}</td>
+              <tr class="${status.level === "red" ? "row-critical" : ""}">
                 <td>${row.store}</td>
                 <td class="num">${formatNumber(row.current)}</td>
                 <td class="num">${formatNumber(Math.round(row.previousFourWeekAvg))}</td>
@@ -1548,7 +1560,7 @@
             `;
           }).join("") : `
           <tr>
-            <td colspan="8">No shops are down more than 20% from the previous four-week average for this task.</td>
+            <td colspan="7">No shops are down more than 20% from the previous four-week average for this task.</td>
           </tr>
         `;
 
@@ -1562,7 +1574,6 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Rank</th>
                     <th>Shop</th>
                     <th class="num">Last 7 Days</th>
                     <th class="num">Previous 4 Week Avg</th>
