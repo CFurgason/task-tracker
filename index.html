@@ -256,14 +256,14 @@
     .line-chart svg {
       width: 100%;
       height: auto;
-      min-height: 280px;
+      min-height: 260px;
       display: block;
     }
 
     .axis-label,
     .tick-label {
       fill: var(--muted);
-      font-size: 22px;
+      font-size: 14px;
     }
 
     .grid-line {
@@ -302,11 +302,11 @@
 
     .point-value {
       fill: #1f2937;
-      font-size: 21px;
+      font-size: 13px;
       font-weight: 700;
       paint-order: stroke;
       stroke: #ffffff;
-      stroke-width: 4px;
+      stroke-width: 3px;
       stroke-linejoin: round;
     }
 
@@ -319,7 +319,7 @@
       flex-wrap: wrap;
       gap: 14px;
       color: var(--muted);
-      font-size: 24px;
+      font-size: 16px;
     }
 
     .legend-item {
@@ -1372,6 +1372,22 @@
       }).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
     }
 
+    function selectedChartLabelPoints(points, valueKey) {
+      if (points.length <= 7) return points;
+
+      const indexes = new Set([0, points.length - 1]);
+      const values = points.map(point => numericValue(point.week[valueKey]));
+      indexes.add(values.indexOf(Math.max(...values)));
+      indexes.add(values.indexOf(Math.min(...values)));
+
+      const step = Math.ceil(points.length / 4);
+      for (let index = step; index < points.length - 1; index += step) {
+        indexes.add(index);
+      }
+
+      return points.filter((point, index) => indexes.has(index));
+    }
+
     function renderWeekChart(data) {
       const chart = document.getElementById("weekChart");
       const series = buildWeeklySeries(data);
@@ -1386,7 +1402,7 @@
       const changeMax = Math.max(0, ...changeValues);
       const paddedChangeMin = changeMin - Math.max(5, Math.abs(changeMin) * 0.15);
       const paddedChangeMax = changeMax + Math.max(5, Math.abs(changeMax) * 0.15);
-      const plot = { left: 58, top: 22, width: 620, height: 220 };
+      const plot = { left: 62, top: 34, width: 610, height: 220 };
       const callsPoints = pointsFor(series, "calls", 0, callsMax * 1.12, plot);
       const changePoints = pointsFor(series, "change", paddedChangeMin, paddedChangeMax, plot);
       if (!callsPoints.length) {
@@ -1396,9 +1412,11 @@
 
       const callPolyline = callsPoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
       const changePolyline = changePoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      const callValueLabels = selectedChartLabelPoints(callsPoints, "calls");
+      const changeValueLabels = selectedChartLabelPoints(changePoints.slice(1), "change");
       const labelPoints = callsPoints.filter((point, index) => {
-        if (callsPoints.length <= 7) return true;
-        const labelIndexes = new Set([...Array(7)].map((_, labelIndex) => Math.round(labelIndex * (callsPoints.length - 1) / 6)));
+        if (callsPoints.length <= 6) return true;
+        const labelIndexes = new Set([...Array(6)].map((_, labelIndex) => Math.round(labelIndex * (callsPoints.length - 1) / 5)));
         return labelIndexes.has(index);
       });
       const callTicks = [0, Math.round(callsMax / 2), callsMax];
@@ -1406,7 +1424,7 @@
 
       chart.innerHTML = `
         <div class="line-chart">
-          <svg viewBox="0 0 760 300" role="img" aria-label="Weekly call trend for the selected shop and task">
+          <svg viewBox="0 0 760 320" role="img" aria-label="Weekly call trend for the selected shop and task">
             ${[0, 0.25, 0.5, 0.75, 1].map(ratio => {
               const y = plot.top + ratio * plot.height;
               return `<line class="grid-line" x1="${plot.left}" y1="${y}" x2="${plot.left + plot.width}" y2="${y}"></line>`;
@@ -1425,11 +1443,11 @@
                 <title>${point.week.label}: ${point.week.change.toFixed(1)}% week-over-week</title>
               </circle>
             `).join("")}
-            ${callsPoints.map((point, index) => `
-              <text class="point-value" x="${point.x.toFixed(1)}" y="${point.y - (index % 2 === 0 ? 10 : 14)}" text-anchor="middle">${formatNumber(point.week.calls)}</text>
+            ${callValueLabels.map((point, index) => `
+              <text class="point-value" x="${point.x.toFixed(1)}" y="${Math.max(18, point.y - (index % 2 === 0 ? 10 : 14))}" text-anchor="middle">${formatNumber(point.week.calls)}</text>
             `).join("")}
-            ${changePoints.slice(1).map((point, index) => `
-              <text class="point-value change-value" x="${point.x.toFixed(1)}" y="${point.y + (index % 2 === 0 ? 18 : 24)}" text-anchor="middle">${point.week.change.toFixed(1)}%</text>
+            ${changeValueLabels.map((point, index) => `
+              <text class="point-value change-value" x="${point.x.toFixed(1)}" y="${Math.min(276, point.y + (index % 2 === 0 ? 18 : 24))}" text-anchor="middle">${point.week.change.toFixed(1)}%</text>
             `).join("")}
             ${callTicks.map(value => {
               const y = plot.top + ((callsMax * 1.12 - value) / (callsMax * 1.12 || 1)) * plot.height;
@@ -1442,9 +1460,9 @@
             ${labelPoints.map(point => `
               <text class="tick-label" x="${point.x.toFixed(1)}" y="${plot.top + plot.height + 26}" text-anchor="middle">${point.week.label}</text>
             `).join("")}
-            <text class="axis-label" x="${plot.left}" y="292">Week</text>
-            <text class="axis-label" x="${plot.left - 42}" y="16">Calls</text>
-            <text class="axis-label" x="${plot.left + plot.width - 28}" y="16">% change</text>
+            <text class="axis-label" x="${plot.left}" y="306">Week</text>
+            <text class="axis-label" x="${plot.left - 38}" y="20">Calls</text>
+            <text class="axis-label" x="${plot.left + plot.width - 18}" y="20">% change</text>
           </svg>
           <div class="chart-legend" aria-hidden="true">
             <span class="legend-item"><span class="legend-swatch"></span>Calls</span>
