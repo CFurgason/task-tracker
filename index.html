@@ -310,10 +310,6 @@
       stroke-linejoin: round;
     }
 
-    .change-value {
-      fill: #7a5408;
-    }
-
     .chart-legend {
       display: flex;
       flex-wrap: wrap;
@@ -1413,7 +1409,6 @@
       const callPolyline = callsPoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
       const changePolyline = changePoints.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
       const callValueLabels = selectedChartLabelPoints(callsPoints, "calls");
-      const changeValueLabels = selectedChartLabelPoints(changePoints.slice(1), "change");
       const labelPoints = callsPoints.filter((point, index) => {
         if (callsPoints.length <= 6) return true;
         const labelIndexes = new Set([...Array(6)].map((_, labelIndex) => Math.round(labelIndex * (callsPoints.length - 1) / 5)));
@@ -1445,9 +1440,6 @@
             `).join("")}
             ${callValueLabels.map((point, index) => `
               <text class="point-value" x="${point.x.toFixed(1)}" y="${Math.max(18, point.y - (index % 2 === 0 ? 10 : 14))}" text-anchor="middle">${formatNumber(point.week.calls)}</text>
-            `).join("")}
-            ${changeValueLabels.map((point, index) => `
-              <text class="point-value change-value" x="${point.x.toFixed(1)}" y="${Math.min(276, point.y + (index % 2 === 0 ? 18 : 24))}" text-anchor="middle">${point.week.change.toFixed(1)}%</text>
             `).join("")}
             ${callTicks.map(value => {
               const y = plot.top + ((callsMax * 1.12 - value) / (callsMax * 1.12 || 1)) * plot.height;
