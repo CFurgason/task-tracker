@@ -443,51 +443,6 @@
       line-height: 1.4;
     }
 
-    .triage-summary {
-      margin-bottom: 18px;
-    }
-
-    .triage-counters {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(180px, 1fr));
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    .triage-counter {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      padding: 14px 16px;
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .triage-counter strong {
-      font-size: 32px;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .triage-counter span {
-      color: var(--muted);
-      font-size: 23px;
-      font-weight: 800;
-      text-transform: uppercase;
-    }
-
-    .triage-row {
-      cursor: pointer;
-    }
-
-    .triage-row:focus {
-      outline: 3px solid rgba(37, 99, 235, 0.35);
-      outline-offset: -3px;
-    }
-
     .compact-line-chart {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -602,7 +557,6 @@
       .controls,
       .dashboard-grid,
       .all-shop-alert,
-      .triage-counters,
       .urgent-groups {
         grid-template-columns: 1fr;
       }
@@ -717,7 +671,6 @@
       </div>
 
       <div id="urgentDrops" class="view view-active">
-        <section class="triage-summary" id="triageSummary" aria-label="Overall drop summary"></section>
         <section id="allShopAlert" aria-live="polite"></section>
         <section class="urgent-groups" id="urgentGroups" aria-label="Most concerning call drops grouped by task"></section>
       </div>
@@ -1239,83 +1192,6 @@
         });
     }
 
-    function taskAnchorId(task) {
-      return `urgent-task-${encodeURIComponent(task)}`;
-    }
-
-    function topCriticalDropSort(a, b) {
-      return dropRowSeveritySort(a, b) ||
-        b.daysSinceCall - a.daysSinceCall ||
-        a.change - b.change ||
-        b.drop - a.drop ||
-        a.store.localeCompare(b.store) ||
-        a.task.localeCompare(b.task);
-    }
-
-    function scrollToUrgentGroup(targetId) {
-      const target = document.getElementById(targetId);
-      if (!target) return;
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-      target.focus({ preventScroll: true });
-    }
-
-    function renderTriageSummary() {
-      const summary = document.getElementById("triageSummary");
-      const drops = getDropRows(rows).map(row => ({ ...row, status: getStatus(row) }));
-      const criticalCount = drops.filter(row => row.status.level === "red").length;
-      const callDropCount = drops.filter(row => row.status.level === "amber").length;
-      const topDrops = drops.sort(topCriticalDropSort).slice(0, 10);
-
-      const body = topDrops.length ? topDrops.map((row, index) => `
-        <tr class="triage-row" tabindex="0" data-target="${taskAnchorId(row.task)}" title="Jump to ${row.task}">
-          <td>${index + 1}</td>
-          <td>${row.store}</td>
-          <td>${row.task}</td>
-          <td class="num trend-down">${row.change.toFixed(1)}%</td>
-          <td class="num">${row.daysSinceCall}</td>
-          <td><span class="badge badge-${row.status.level}">${row.status.label}</span></td>
-        </tr>
-      `).join("") : `
-        <tr>
-          <td colspan="6">No warning-level drops across all categories.</td>
-        </tr>
-      `;
-
-      summary.innerHTML = `
-        <div class="triage-counters" aria-label="Overall warning counts">
-          <div class="triage-counter">
-            <strong>${formatNumber(criticalCount)}</strong>
-            <span>Critical</span>
-          </div>
-          <div class="triage-counter">
-            <strong>${formatNumber(callDropCount)}</strong>
-            <span>Call Drop</span>
-          </div>
-        </div>
-        <article class="panel">
-          <div class="panel-head">
-            <h2 class="panel-title">Top Critical Drops</h2>
-            <span class="panel-note">10 worst rows across all categories</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Shop</th>
-                  <th>Category</th>
-                  <th class="num">% Change</th>
-                  <th class="num">Days Since Call</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>${body}</tbody>
-            </table>
-          </div>
-        </article>
-      `;
-    }
-
     function previousFourWeekAverage(row) {
       return numericValue(row.previousFourWeekAvg);
     }
@@ -1677,7 +1553,7 @@
         `;
 
         return `
-          <article class="panel" id="${taskAnchorId(group.task)}" tabindex="-1">
+          <article class="panel">
             <div class="panel-head">
               <h2 class="panel-title">${group.task}</h2>
               <span class="panel-note">${group.drops.length} drop${group.drops.length === 1 ? "" : "s"}</span>
@@ -1741,7 +1617,6 @@
       renderWeekChart(graphData);
       renderAlerts(storeData);
       renderTable(storeData);
-      renderTriageSummary();
       renderAllShopAlert();
       renderUrgentDrops();
       setActiveView();
@@ -1751,18 +1626,6 @@
     loadDashboardData().catch(error => {
       console.error(error);
       document.getElementById("asOfDate").textContent = `Dashboard data could not be loaded: ${error.message}`;
-    });
-    document.addEventListener("click", event => {
-      const row = event.target.closest(".triage-row");
-      if (!row) return;
-      scrollToUrgentGroup(row.dataset.target);
-    });
-    document.addEventListener("keydown", event => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      const row = event.target.closest(".triage-row");
-      if (!row) return;
-      event.preventDefault();
-      scrollToUrgentGroup(row.dataset.target);
     });
     window.addEventListener("resize", syncWarningPanelHeight);
   </script>
