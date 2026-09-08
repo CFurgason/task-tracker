@@ -798,7 +798,7 @@
           <article class="panel">
             <div class="panel-head">
               <h2 class="panel-title">Tasks Declining Across Shops</h2>
-              <span class="panel-note">Sustained weekly drops</span>
+              <span class="panel-note">Significant task-call drops</span>
             </div>
             <div class="trend-task-list" id="trendTaskList"></div>
           </article>
@@ -806,7 +806,7 @@
           <article class="panel trend-details">
             <div class="panel-head">
               <h2 class="panel-title">Shop Trend Details</h2>
-              <span class="panel-note">Current week versus recent pace</span>
+              <span class="panel-note">Excludes no-show and returning-lost calls</span>
             </div>
             <div class="table-wrap">
               <table>
@@ -834,7 +834,7 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "declining-trends-2026-09-08";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "declining-trends-exclusions-2026-09-08";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -855,6 +855,11 @@
         "Retention Re-Engage",
         "Service Overdue",
         "Warranty Inspection"
+      ].map(normalizeTaskName)),
+      trendExcludedTasks: new Set([
+        "Reservation No Show",
+        "Returning Lost Customer",
+        "Returning Lost Vehicle"
       ].map(normalizeTaskName))
     };
 
@@ -867,6 +872,10 @@
 
     function isExcludedTask(task) {
       return dashboardConfig.excludedTasks.has(normalizeTaskName(task));
+    }
+
+    function isTrendExcludedTask(task) {
+      return dashboardConfig.trendExcludedTasks.has(normalizeTaskName(task));
     }
 
     function parseCsv(text) {
@@ -1803,6 +1812,7 @@
 
     function getDecliningTrendRows() {
       return rows
+        .filter(row => !isTrendExcludedTask(row.task))
         .map(row => {
           const calls = weeklyCalls(row);
           const current = calls[calls.length - 1] || 0;
@@ -1865,8 +1875,9 @@
 
     function buildTrendTaskSummaries(trendRows) {
       return uniqueValues("task")
+        .filter(task => !isTrendExcludedTask(task))
         .map(task => {
-          const taskRows = rows.filter(row => row.task === task);
+          const taskRows = rows.filter(row => row.task === task && !isTrendExcludedTask(row.task));
           const affectedRows = trendRows.filter(row => row.task === task);
           if (!affectedRows.length) return null;
 
@@ -1901,7 +1912,7 @@
     function renderTrendSummary(trendRows, taskSummaries) {
       const criticalRows = trendRows.filter(row => row.status.level === "red");
       const multiShopTasks = taskSummaries.filter(task => task.affectedRows.length >= 2);
-      const totalShopTaskPairs = rows.length;
+      const totalShopTaskPairs = rows.filter(row => !isTrendExcludedTask(row.task)).length;
       const affectedPercent = totalShopTaskPairs
         ? Math.round((trendRows.length / totalShopTaskPairs) * 100)
         : 0;
