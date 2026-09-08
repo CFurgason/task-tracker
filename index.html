@@ -850,7 +850,7 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "task-focused-declining-trends-2026-09-08";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "multi-shop-task-trends-2026-09-08";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -1924,7 +1924,7 @@
         .map(task => {
           const taskRows = rows.filter(row => row.task === task && !isTrendExcludedTask(row.task));
           const affectedRows = trendRows.filter(row => row.task === task);
-          if (!affectedRows.length) return null;
+          if (affectedRows.length < 2) return null;
 
           const totalCurrent = affectedRows.reduce((sum, row) => sum + row.current, 0);
           const totalAverage = affectedRows.reduce((sum, row) => sum + row.baseline, 0);
@@ -1967,23 +1967,24 @@
     }
 
     function renderTrendSummary(trendRows, taskSummaries) {
-      const criticalRows = trendRows.filter(row => row.dropType === "critical");
-      const suddenRows = trendRows.filter(row => row.dropType === "sudden");
-      const gradualRows = trendRows.filter(row => row.dropType === "gradual");
+      const surfacedRows = taskSummaries.flatMap(task => task.affectedRows);
+      const criticalRows = surfacedRows.filter(row => row.dropType === "critical");
+      const suddenRows = surfacedRows.filter(row => row.dropType === "sudden");
+      const gradualRows = surfacedRows.filter(row => row.dropType === "gradual");
       const totalShopTaskPairs = rows.filter(row => !isTrendExcludedTask(row.task)).length;
       const affectedPercent = totalShopTaskPairs
-        ? Math.round((trendRows.length / totalShopTaskPairs) * 100)
+        ? Math.round((surfacedRows.length / totalShopTaskPairs) * 100)
         : 0;
 
       document.getElementById("trendSummary").innerHTML = `
         <article class="metric-card">
           <p class="metric-label">Impacted Tasks</p>
           <p class="metric-value">${formatNumber(taskSummaries.length)}</p>
-          <p class="metric-note">Tasks with at least one shop trending down.</p>
+          <p class="metric-note">Tasks dropping in two or more shops.</p>
         </article>
         <article class="metric-card">
           <p class="metric-label">Significant Drops</p>
-          <p class="metric-value">${formatNumber(trendRows.length)}</p>
+          <p class="metric-value">${formatNumber(surfacedRows.length)}</p>
           <p class="metric-note">50%+ below trailing 12-week baseline; ${affectedPercent}% of monitored pairs.</p>
         </article>
         <article class="metric-card">
@@ -2010,7 +2011,7 @@
       const list = document.getElementById("trendTaskList");
 
       if (!taskSummaries.length) {
-        list.innerHTML = `<div class="empty-alerts">No shop and task pairs are at least 50% below their trailing 12-week call baseline.</div>`;
+        list.innerHTML = `<div class="empty-alerts">No task types are dropping across two or more shops by at least 50% versus their trailing 12-week baseline.</div>`;
         return;
       }
 
