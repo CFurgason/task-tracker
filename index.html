@@ -525,7 +525,7 @@
 
     .trend-page-grid {
       display: grid;
-      grid-template-columns: minmax(420px, 0.9fr) minmax(540px, 1.1fr);
+      grid-template-columns: 1fr;
       gap: 18px;
       align-items: start;
     }
@@ -569,6 +569,41 @@
       line-height: 1.3;
     }
 
+    .trend-pair-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .trend-pair {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(203, 213, 225, 0.85);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.72);
+      padding: 9px 10px;
+    }
+
+    .trend-pair-shop {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .trend-pair-meta {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.25;
+    }
+
+    .trend-pair .badge {
+      justify-self: end;
+    }
+
     .sparkline {
       width: 130px;
       height: 34px;
@@ -585,10 +620,6 @@
 
     .sparkline-down path {
       stroke: var(--red);
-    }
-
-    .trend-details table {
-      min-width: 1080px;
     }
 
     table {
@@ -798,33 +829,9 @@
           <article class="panel">
             <div class="panel-head">
               <h2 class="panel-title">Tasks Declining Across Shops</h2>
-              <span class="panel-note">Significant task-call drops</span>
+              <span class="panel-note">50%+ below trailing 12-week baseline</span>
             </div>
             <div class="trend-task-list" id="trendTaskList"></div>
-          </article>
-
-          <article class="panel trend-details">
-            <div class="panel-head">
-              <h2 class="panel-title">Shop Trend Details</h2>
-              <span class="panel-note">Excludes no-show and returning-lost calls</span>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Shop</th>
-                    <th>Task</th>
-                    <th class="num">Current Week</th>
-                    <th class="num">Prior Week</th>
-                    <th class="num">Recent Avg</th>
-                    <th class="num">% Change</th>
-                    <th class="num">Decline Streak</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="trendDetailRows"></tbody>
-              </table>
-            </div>
           </article>
         </section>
       </div>
@@ -834,7 +841,7 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "declining-trends-exclusions-2026-09-08";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "declining-trends-12-week-baseline-2026-09-08";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -1777,37 +1784,60 @@
       return (row.weekly || []).map(week => numericValue(week.calls));
     }
 
-    function countDeclineStreak(values) {
-      let streak = 0;
-      for (let index = values.length - 1; index > 0; index -= 1) {
-        if (numericValue(values[index]) < numericValue(values[index - 1])) {
-          streak += 1;
-        } else {
-          break;
-        }
-      }
-      return streak;
+    function baselineWeeks(calls) {
+      return calls.slice(Math.max(0, calls.length - 13), -1);
     }
 
-    function trendStatus(trend) {
-      if ((trend.current === 0 && trend.recentAverage >= 1) || trend.change <= -51 || trend.declineStreak >= 3) {
+    function countRecentDeclines(values) {
+      let declines = 0;
+      for (let index = Math.max(1, values.length - 4); index < values.length; index += 1) {
+        if (numericValue(values[index]) < numericValue(values[index - 1])) declines += 1;
+      }
+      return declines;
+    }
+
+    function classifyDrop(current, prior, baseline, recentDeclines, isCriticalZero) {
+      if (isCriticalZero) return "critical";
+
+      const totalDrop = baseline - current;
+      const currentWeekDrop = prior - current;
+      const priorNearBaseline = prior >= baseline * 0.75;
+      const mostlyThisWeek = totalDrop > 0 && currentWeekDrop >= totalDrop * 0.6;
+
+      return priorNearBaseline && mostlyThisWeek && recentDeclines <= 1 ? "sudden" : "gradual";
+    }
+
+    function trendStatus(dropType) {
+      if (dropType === "critical") {
         return {
           level: "red",
-          label: "Critical Trend"
+          label: "Critical Zero"
         };
       }
 
-      if (trend.change <= -21 || trend.declineStreak >= 2) {
+      if (dropType === "sudden") {
         return {
-          level: "amber",
-          label: "Declining"
+          level: "red",
+          label: "Sudden Drop"
+        };
+      }
+
+      if (dropType !== "gradual") {
+        return {
+          level: "ok",
+          label: "On track"
         };
       }
 
       return {
-        level: "ok",
-        label: "On track"
+        level: "amber",
+        label: "Gradual Drop"
       };
+    }
+
+    function trendPriority(row) {
+      const priority = { critical: 0, sudden: 1, gradual: 2 };
+      return priority[row.dropType] ?? 3;
     }
 
     function getDecliningTrendRows() {
@@ -1817,31 +1847,37 @@
           const calls = weeklyCalls(row);
           const current = calls[calls.length - 1] || 0;
           const prior = calls.length > 1 ? calls[calls.length - 2] : 0;
-          const recentAverage = average(calls.slice(Math.max(0, calls.length - 5), -1));
+          const baselineValues = baselineWeeks(calls);
+          const baseline = average(baselineValues);
+          const isCriticalZero = baseline > 10 && current === 0;
+          const isSignificantDrop = baseline > 0 && current <= baseline * 0.5;
+          const recentDeclines = countRecentDeclines(calls);
+          const dropType = isCriticalZero || isSignificantDrop
+            ? classifyDrop(current, prior, baseline, recentDeclines, isCriticalZero)
+            : "none";
           const trend = {
             ...row,
             calls,
             current,
             prior,
-            recentAverage,
-            change: percentChange(current, recentAverage),
-            declineStreak: countDeclineStreak(calls)
+            baseline,
+            baselineWeekCount: baselineValues.length,
+            change: percentChange(current, baseline),
+            recentDeclines,
+            dropType,
+            isCriticalZero,
+            isSignificantDrop
           };
           return {
             ...trend,
-            status: trendStatus(trend)
+            status: trendStatus(dropType)
           };
         })
-        .filter(row =>
-          row.recentAverage > 0 &&
-          row.status.level !== "ok" &&
-          (row.current < row.prior || row.declineStreak >= 2 || row.change <= -21)
-        )
+        .filter(row => row.baseline > 0 && (row.isCriticalZero || row.isSignificantDrop))
         .sort((a, b) => {
-          const severity = { red: 0, amber: 1, ok: 2 };
-          return severity[a.status.level] - severity[b.status.level] ||
+          return trendPriority(a) - trendPriority(b) ||
             a.change - b.change ||
-            b.declineStreak - a.declineStreak ||
+            b.baseline - a.baseline ||
             a.task.localeCompare(b.task) ||
             a.store.localeCompare(b.store);
         });
@@ -1882,36 +1918,49 @@
           if (!affectedRows.length) return null;
 
           const totalCurrent = affectedRows.reduce((sum, row) => sum + row.current, 0);
-          const totalAverage = affectedRows.reduce((sum, row) => sum + row.recentAverage, 0);
+          const totalAverage = affectedRows.reduce((sum, row) => sum + row.baseline, 0);
           const affectedRatio = affectedRows.length / Math.max(taskRows.length, 1);
-          const hasCritical = affectedRows.some(row => row.status.level === "red");
+          const criticalCount = affectedRows.filter(row => row.dropType === "critical").length;
+          const suddenCount = affectedRows.filter(row => row.dropType === "sudden").length;
+          const gradualCount = affectedRows.filter(row => row.dropType === "gradual").length;
+          const sortedAffectedRows = [...affectedRows].sort((a, b) =>
+            trendPriority(a) - trendPriority(b) ||
+            a.change - b.change ||
+            b.baseline - a.baseline ||
+            a.store.localeCompare(b.store)
+          );
 
           return {
             task,
-            affectedRows,
+            affectedRows: sortedAffectedRows,
             shopCount: taskRows.length,
             affectedRatio,
             totalCurrent,
             totalAverage,
             change: percentChange(totalCurrent, totalAverage),
-            declineStreak: Math.max(...affectedRows.map(row => row.declineStreak)),
-            status: hasCritical || (affectedRows.length >= 2 && affectedRatio >= 0.5) ? "critical" : "warning",
+            criticalCount,
+            suddenCount,
+            gradualCount,
+            topPriority: Math.min(...affectedRows.map(trendPriority)),
+            status: criticalCount || suddenCount ? "critical" : "warning",
             values: aggregateWeeklyCalls(taskRows)
           };
         })
         .filter(Boolean)
         .sort((a, b) =>
-          Number(b.status === "critical") - Number(a.status === "critical") ||
+          a.topPriority - b.topPriority ||
+          b.suddenCount - a.suddenCount ||
+          b.criticalCount - a.criticalCount ||
           b.affectedRows.length - a.affectedRows.length ||
-          b.affectedRatio - a.affectedRatio ||
           a.change - b.change ||
           a.task.localeCompare(b.task)
         );
     }
 
     function renderTrendSummary(trendRows, taskSummaries) {
-      const criticalRows = trendRows.filter(row => row.status.level === "red");
-      const multiShopTasks = taskSummaries.filter(task => task.affectedRows.length >= 2);
+      const criticalRows = trendRows.filter(row => row.dropType === "critical");
+      const suddenRows = trendRows.filter(row => row.dropType === "sudden");
+      const gradualRows = trendRows.filter(row => row.dropType === "gradual");
       const totalShopTaskPairs = rows.filter(row => !isTrendExcludedTask(row.task)).length;
       const affectedPercent = totalShopTaskPairs
         ? Math.round((trendRows.length / totalShopTaskPairs) * 100)
@@ -1924,20 +1973,35 @@
           <p class="metric-note">Tasks with at least one shop trending down.</p>
         </article>
         <article class="metric-card">
-          <p class="metric-label">Shop-Task Alerts</p>
+          <p class="metric-label">Significant Drops</p>
           <p class="metric-value">${formatNumber(trendRows.length)}</p>
-          <p class="metric-note">${affectedPercent}% of monitored shop-task pairs.</p>
+          <p class="metric-note">50%+ below trailing 12-week baseline; ${affectedPercent}% of monitored pairs.</p>
         </article>
         <article class="metric-card">
-          <p class="metric-label">Critical Trends</p>
+          <p class="metric-label">Critical Zeroes</p>
           <p class="metric-value">${formatNumber(criticalRows.length)}</p>
-          <p class="metric-note">Zero-volume, 51%+ drops, or 3-week declines.</p>
+          <p class="metric-note">12-week average above 10 calls, current week at 0.</p>
         </article>
         <article class="metric-card">
-          <p class="metric-label">Multi-Shop Issues</p>
-          <p class="metric-value">${formatNumber(multiShopTasks.length)}</p>
-          <p class="metric-note">Same task declining in two or more shops.</p>
+          <p class="metric-label">Sudden / Gradual</p>
+          <p class="metric-value">${formatNumber(suddenRows.length)} / ${formatNumber(gradualRows.length)}</p>
+          <p class="metric-note">Sudden drops are prioritized ahead of gradual declines.</p>
         </article>
+      `;
+    }
+
+    function renderTrendPair(row) {
+      return `
+        <div class="trend-pair">
+          <div>
+            <div class="trend-pair-shop">${row.store}</div>
+            <div class="trend-pair-meta">
+              Current: ${formatNumber(row.current)}; prior: ${formatNumber(row.prior)};
+              12-week avg: ${formatNumber(Math.round(row.baseline))}; change: ${row.change.toFixed(1)}%.
+            </div>
+          </div>
+          <span class="badge badge-${row.status.level}">${row.status.label}</span>
+        </div>
       `;
     }
 
@@ -1945,7 +2009,7 @@
       const list = document.getElementById("trendTaskList");
 
       if (!taskSummaries.length) {
-        list.innerHTML = `<div class="empty-alerts">No sustained declining task trends are visible in the current data.</div>`;
+        list.innerHTML = `<div class="empty-alerts">No shop and task pairs are at least 50% below their trailing 12-week call baseline.</div>`;
         return;
       }
 
@@ -1958,34 +2022,17 @@
               ${renderSparkline(task.values, task.change < 0)}
             </div>
             <div class="trend-task-meta">
-              ${task.affectedRows.length} of ${task.shopCount} shops (${affectedPercent}%) are trending down.
-              Current total: ${formatNumber(task.totalCurrent)}; recent pace: ${formatNumber(Math.round(task.totalAverage))};
-              change: ${task.change.toFixed(1)}%; longest decline: ${task.declineStreak} week${task.declineStreak === 1 ? "" : "s"}.
+              ${task.affectedRows.length} of ${task.shopCount} shops (${affectedPercent}%) are at least 50% below baseline.
+              Critical: ${task.criticalCount}; sudden: ${task.suddenCount}; gradual: ${task.gradualCount}.
+              Current total: ${formatNumber(task.totalCurrent)}; 12-week baseline: ${formatNumber(Math.round(task.totalAverage))};
+              change: ${task.change.toFixed(1)}%.
+            </div>
+            <div class="trend-pair-list">
+              ${task.affectedRows.map(renderTrendPair).join("")}
             </div>
           </div>
         `;
       }).join("");
-    }
-
-    function renderTrendDetails(trendRows) {
-      const body = document.getElementById("trendDetailRows");
-
-      body.innerHTML = trendRows.length ? trendRows.map(row => `
-        <tr class="${row.status.level === "red" ? "row-critical" : ""}">
-          <td>${row.store}</td>
-          <td>${row.task}</td>
-          <td class="num">${formatNumber(row.current)}</td>
-          <td class="num">${formatNumber(row.prior)}</td>
-          <td class="num">${formatNumber(Math.round(row.recentAverage))}</td>
-          <td class="num trend-down">${row.change.toFixed(1)}%</td>
-          <td class="num">${row.declineStreak}</td>
-          <td><span class="badge badge-${row.status.level}">${row.status.label}</span></td>
-        </tr>
-      `).join("") : `
-        <tr>
-          <td colspan="8">No sustained declining task trends are visible in the current data.</td>
-        </tr>
-      `;
     }
 
     function renderDecliningTrends() {
@@ -1994,7 +2041,6 @@
 
       renderTrendSummary(trendRows, taskSummaries);
       renderTrendTaskList(taskSummaries);
-      renderTrendDetails(trendRows);
     }
 
     function setActiveView() {
