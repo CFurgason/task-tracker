@@ -485,6 +485,112 @@
       white-space: nowrap;
     }
 
+    .trend-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .metric-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 15px 16px;
+    }
+
+    .metric-label {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 21px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      margin: 0;
+      color: var(--text);
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .metric-note {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .trend-page-grid {
+      display: grid;
+      grid-template-columns: minmax(420px, 0.9fr) minmax(540px, 1.1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .trend-task-list {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .trend-task-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #ffffff;
+    }
+
+    .trend-task-card-critical {
+      border-color: #ffc8c2;
+      background: var(--red-bg);
+    }
+
+    .trend-task-card-warning {
+      border-color: #f8d88a;
+      background: var(--amber-bg);
+    }
+
+    .trend-task-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-weight: 800;
+      font-size: 24px;
+    }
+
+    .trend-task-meta {
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.3;
+    }
+
+    .sparkline {
+      width: 130px;
+      height: 34px;
+      display: block;
+    }
+
+    .sparkline path {
+      fill: none;
+      stroke: #0f766e;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .sparkline-down path {
+      stroke: var(--red);
+    }
+
+    .trend-details table {
+      min-width: 1080px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -566,6 +672,8 @@
       .controls,
       .dashboard-grid,
       .all-shop-alert,
+      .trend-summary,
+      .trend-page-grid,
       .urgent-groups {
         grid-template-columns: 1fr;
       }
@@ -684,12 +792,49 @@
         <section class="urgent-groups" id="urgentGroups" aria-label="Most concerning call drops grouped by task"></section>
       </div>
 
+      <div id="decliningTrends" class="view">
+        <section class="trend-summary" id="trendSummary" aria-label="Declining trend summary"></section>
+        <section class="trend-page-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Tasks Declining Across Shops</h2>
+              <span class="panel-note">Sustained weekly drops</span>
+            </div>
+            <div class="trend-task-list" id="trendTaskList"></div>
+          </article>
+
+          <article class="panel trend-details">
+            <div class="panel-head">
+              <h2 class="panel-title">Shop Trend Details</h2>
+              <span class="panel-note">Current week versus recent pace</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Shop</th>
+                    <th>Task</th>
+                    <th class="num">Current Week</th>
+                    <th class="num">Prior Week</th>
+                    <th class="num">Recent Avg</th>
+                    <th class="num">% Change</th>
+                    <th class="num">Decline Streak</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="trendDetailRows"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </div>
+
     </main>
   </div>
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "wide-layout-2026-08-24";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "declining-trends-2026-09-08";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -1024,6 +1169,7 @@
     function initializeControls() {
       viewSelector.innerHTML = `
         <option value="urgentDrops">Urgent Drops</option>
+        <option value="decliningTrends">Declining Trends</option>
       `;
       taskFilter.innerHTML = '<option value="All">All Tasks</option>';
       addOptions(viewSelector, uniqueValues("store"));
@@ -1103,7 +1249,7 @@
     }
 
     function isShopPage() {
-      return viewSelector.value !== "urgentDrops";
+      return !["urgentDrops", "decliningTrends"].includes(viewSelector.value);
     }
 
     function selectedStoreRows() {
@@ -1611,6 +1757,235 @@
       `;
     }
 
+    function average(values) {
+      const cleanValues = values.map(numericValue).filter(value => Number.isFinite(value));
+      return cleanValues.length
+        ? cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length
+        : 0;
+    }
+
+    function weeklyCalls(row) {
+      return (row.weekly || []).map(week => numericValue(week.calls));
+    }
+
+    function countDeclineStreak(values) {
+      let streak = 0;
+      for (let index = values.length - 1; index > 0; index -= 1) {
+        if (numericValue(values[index]) < numericValue(values[index - 1])) {
+          streak += 1;
+        } else {
+          break;
+        }
+      }
+      return streak;
+    }
+
+    function trendStatus(trend) {
+      if ((trend.current === 0 && trend.recentAverage >= 1) || trend.change <= -51 || trend.declineStreak >= 3) {
+        return {
+          level: "red",
+          label: "Critical Trend"
+        };
+      }
+
+      if (trend.change <= -21 || trend.declineStreak >= 2) {
+        return {
+          level: "amber",
+          label: "Declining"
+        };
+      }
+
+      return {
+        level: "ok",
+        label: "On track"
+      };
+    }
+
+    function getDecliningTrendRows() {
+      return rows
+        .map(row => {
+          const calls = weeklyCalls(row);
+          const current = calls[calls.length - 1] || 0;
+          const prior = calls.length > 1 ? calls[calls.length - 2] : 0;
+          const recentAverage = average(calls.slice(Math.max(0, calls.length - 5), -1));
+          const trend = {
+            ...row,
+            calls,
+            current,
+            prior,
+            recentAverage,
+            change: percentChange(current, recentAverage),
+            declineStreak: countDeclineStreak(calls)
+          };
+          return {
+            ...trend,
+            status: trendStatus(trend)
+          };
+        })
+        .filter(row =>
+          row.recentAverage > 0 &&
+          row.status.level !== "ok" &&
+          (row.current < row.prior || row.declineStreak >= 2 || row.change <= -21)
+        )
+        .sort((a, b) => {
+          const severity = { red: 0, amber: 1, ok: 2 };
+          return severity[a.status.level] - severity[b.status.level] ||
+            a.change - b.change ||
+            b.declineStreak - a.declineStreak ||
+            a.task.localeCompare(b.task) ||
+            a.store.localeCompare(b.store);
+        });
+    }
+
+    function aggregateWeeklyCalls(data) {
+      const series = buildWeeklySeries(data);
+      return series.map(week => numericValue(week.calls));
+    }
+
+    function renderSparkline(values, isDown) {
+      if (!values.length) return "";
+
+      const width = 130;
+      const height = 34;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+      const points = values.map((value, index) => {
+        const x = values.length <= 1 ? width / 2 : (index / (values.length - 1)) * width;
+        const y = height - ((value - min) / range) * (height - 4) - 2;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ");
+
+      return `
+        <svg class="sparkline ${isDown ? "sparkline-down" : ""}" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+          <path d="M ${points.replace(/ /g, " L ")}"></path>
+        </svg>
+      `;
+    }
+
+    function buildTrendTaskSummaries(trendRows) {
+      return uniqueValues("task")
+        .map(task => {
+          const taskRows = rows.filter(row => row.task === task);
+          const affectedRows = trendRows.filter(row => row.task === task);
+          if (!affectedRows.length) return null;
+
+          const totalCurrent = affectedRows.reduce((sum, row) => sum + row.current, 0);
+          const totalAverage = affectedRows.reduce((sum, row) => sum + row.recentAverage, 0);
+          const affectedRatio = affectedRows.length / Math.max(taskRows.length, 1);
+          const hasCritical = affectedRows.some(row => row.status.level === "red");
+
+          return {
+            task,
+            affectedRows,
+            shopCount: taskRows.length,
+            affectedRatio,
+            totalCurrent,
+            totalAverage,
+            change: percentChange(totalCurrent, totalAverage),
+            declineStreak: Math.max(...affectedRows.map(row => row.declineStreak)),
+            status: hasCritical || (affectedRows.length >= 2 && affectedRatio >= 0.5) ? "critical" : "warning",
+            values: aggregateWeeklyCalls(taskRows)
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) =>
+          Number(b.status === "critical") - Number(a.status === "critical") ||
+          b.affectedRows.length - a.affectedRows.length ||
+          b.affectedRatio - a.affectedRatio ||
+          a.change - b.change ||
+          a.task.localeCompare(b.task)
+        );
+    }
+
+    function renderTrendSummary(trendRows, taskSummaries) {
+      const criticalRows = trendRows.filter(row => row.status.level === "red");
+      const multiShopTasks = taskSummaries.filter(task => task.affectedRows.length >= 2);
+      const totalShopTaskPairs = rows.length;
+      const affectedPercent = totalShopTaskPairs
+        ? Math.round((trendRows.length / totalShopTaskPairs) * 100)
+        : 0;
+
+      document.getElementById("trendSummary").innerHTML = `
+        <article class="metric-card">
+          <p class="metric-label">Impacted Tasks</p>
+          <p class="metric-value">${formatNumber(taskSummaries.length)}</p>
+          <p class="metric-note">Tasks with at least one shop trending down.</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Shop-Task Alerts</p>
+          <p class="metric-value">${formatNumber(trendRows.length)}</p>
+          <p class="metric-note">${affectedPercent}% of monitored shop-task pairs.</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Critical Trends</p>
+          <p class="metric-value">${formatNumber(criticalRows.length)}</p>
+          <p class="metric-note">Zero-volume, 51%+ drops, or 3-week declines.</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Multi-Shop Issues</p>
+          <p class="metric-value">${formatNumber(multiShopTasks.length)}</p>
+          <p class="metric-note">Same task declining in two or more shops.</p>
+        </article>
+      `;
+    }
+
+    function renderTrendTaskList(taskSummaries) {
+      const list = document.getElementById("trendTaskList");
+
+      if (!taskSummaries.length) {
+        list.innerHTML = `<div class="empty-alerts">No sustained declining task trends are visible in the current data.</div>`;
+        return;
+      }
+
+      list.innerHTML = taskSummaries.map(task => {
+        const affectedPercent = Math.round(task.affectedRatio * 100);
+        return `
+          <div class="trend-task-card trend-task-card-${task.status}">
+            <div class="trend-task-title">
+              <span>${task.task}</span>
+              ${renderSparkline(task.values, task.change < 0)}
+            </div>
+            <div class="trend-task-meta">
+              ${task.affectedRows.length} of ${task.shopCount} shops (${affectedPercent}%) are trending down.
+              Current total: ${formatNumber(task.totalCurrent)}; recent pace: ${formatNumber(Math.round(task.totalAverage))};
+              change: ${task.change.toFixed(1)}%; longest decline: ${task.declineStreak} week${task.declineStreak === 1 ? "" : "s"}.
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderTrendDetails(trendRows) {
+      const body = document.getElementById("trendDetailRows");
+
+      body.innerHTML = trendRows.length ? trendRows.map(row => `
+        <tr class="${row.status.level === "red" ? "row-critical" : ""}">
+          <td>${row.store}</td>
+          <td>${row.task}</td>
+          <td class="num">${formatNumber(row.current)}</td>
+          <td class="num">${formatNumber(row.prior)}</td>
+          <td class="num">${formatNumber(Math.round(row.recentAverage))}</td>
+          <td class="num trend-down">${row.change.toFixed(1)}%</td>
+          <td class="num">${row.declineStreak}</td>
+          <td><span class="badge badge-${row.status.level}">${row.status.label}</span></td>
+        </tr>
+      `).join("") : `
+        <tr>
+          <td colspan="8">No sustained declining task trends are visible in the current data.</td>
+        </tr>
+      `;
+    }
+
+    function renderDecliningTrends() {
+      const trendRows = getDecliningTrendRows();
+      const taskSummaries = buildTrendTaskSummaries(trendRows);
+
+      renderTrendSummary(trendRows, taskSummaries);
+      renderTrendTaskList(taskSummaries);
+      renderTrendDetails(trendRows);
+    }
+
     function setActiveView() {
       const shopPage = isShopPage();
       document.querySelectorAll(".view").forEach(view => {
@@ -1640,6 +2015,7 @@
       renderTable(storeData);
       renderAllShopAlert();
       renderUrgentDrops();
+      renderDecliningTrends();
       setActiveView();
       syncWarningPanelHeight();
     }
