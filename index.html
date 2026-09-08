@@ -569,39 +569,47 @@
       line-height: 1.3;
     }
 
-    .trend-pair-list {
+    .trend-task-stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 10px;
       margin-top: 12px;
     }
 
-    .trend-pair {
-      display: grid;
-      grid-template-columns: minmax(180px, 1fr) auto;
-      gap: 10px;
-      align-items: center;
+    .trend-stat {
       border: 1px solid rgba(203, 213, 225, 0.85);
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.72);
       padding: 9px 10px;
     }
 
-    .trend-pair-shop {
-      font-size: 22px;
-      font-weight: 800;
-      line-height: 1.2;
+    .trend-stat-label {
+      margin: 0 0 3px;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 700;
+      text-transform: uppercase;
     }
 
-    .trend-pair-meta {
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 20px;
+    .trend-stat-value {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 800;
       line-height: 1.25;
     }
 
-    .trend-pair .badge {
-      justify-self: end;
+    .trend-shop-context {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.3;
+    }
+
+    .trend-severity-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
     }
 
     .sparkline {
@@ -705,6 +713,7 @@
       .all-shop-alert,
       .trend-summary,
       .trend-page-grid,
+      .trend-task-stats,
       .urgent-groups {
         grid-template-columns: 1fr;
       }
@@ -828,7 +837,7 @@
         <section class="trend-page-grid">
           <article class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">Tasks Declining Across Shops</h2>
+              <h2 class="panel-title">Task Types With Significant Call Drops</h2>
               <span class="panel-note">50%+ below trailing 12-week baseline</span>
             </div>
             <div class="trend-task-list" id="trendTaskList"></div>
@@ -841,7 +850,7 @@
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "declining-trends-12-week-baseline-2026-09-08";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "task-focused-declining-trends-2026-09-08";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -1990,19 +1999,11 @@
       `;
     }
 
-    function renderTrendPair(row) {
-      return `
-        <div class="trend-pair">
-          <div>
-            <div class="trend-pair-shop">${row.store}</div>
-            <div class="trend-pair-meta">
-              Current: ${formatNumber(row.current)}; prior: ${formatNumber(row.prior)};
-              12-week avg: ${formatNumber(Math.round(row.baseline))}; change: ${row.change.toFixed(1)}%.
-            </div>
-          </div>
-          <span class="badge badge-${row.status.level}">${row.status.label}</span>
-        </div>
-      `;
+    function topAffectedShopNames(rows) {
+      const names = rows.map(row => row.store);
+      const visible = names.slice(0, 4).join(", ");
+      const remaining = names.length - 4;
+      return remaining > 0 ? `${visible}, +${remaining} more` : visible;
     }
 
     function renderTrendTaskList(taskSummaries) {
@@ -2022,13 +2023,33 @@
               ${renderSparkline(task.values, task.change < 0)}
             </div>
             <div class="trend-task-meta">
-              ${task.affectedRows.length} of ${task.shopCount} shops (${affectedPercent}%) are at least 50% below baseline.
-              Critical: ${task.criticalCount}; sudden: ${task.suddenCount}; gradual: ${task.gradualCount}.
-              Current total: ${formatNumber(task.totalCurrent)}; 12-week baseline: ${formatNumber(Math.round(task.totalAverage))};
-              change: ${task.change.toFixed(1)}%.
+              ${task.affectedRows.length} of ${task.shopCount} shops (${affectedPercent}%) are at least 50% below this task's baseline.
             </div>
-            <div class="trend-pair-list">
-              ${task.affectedRows.map(renderTrendPair).join("")}
+            <div class="trend-task-stats">
+              <div class="trend-stat">
+                <p class="trend-stat-label">Current Calls</p>
+                <p class="trend-stat-value">${formatNumber(task.totalCurrent)}</p>
+              </div>
+              <div class="trend-stat">
+                <p class="trend-stat-label">12-Week Baseline</p>
+                <p class="trend-stat-value">${formatNumber(Math.round(task.totalAverage))}</p>
+              </div>
+              <div class="trend-stat">
+                <p class="trend-stat-label">Task Change</p>
+                <p class="trend-stat-value trend-down">${task.change.toFixed(1)}%</p>
+              </div>
+              <div class="trend-stat">
+                <p class="trend-stat-label">Affected Shops</p>
+                <p class="trend-stat-value">${formatNumber(task.affectedRows.length)}</p>
+              </div>
+            </div>
+            <div class="trend-severity-line">
+              ${task.criticalCount ? `<span class="badge badge-red">${task.criticalCount} critical zero</span>` : ""}
+              ${task.suddenCount ? `<span class="badge badge-red">${task.suddenCount} sudden</span>` : ""}
+              ${task.gradualCount ? `<span class="badge badge-amber">${task.gradualCount} gradual</span>` : ""}
+            </div>
+            <div class="trend-shop-context">
+              Affected shop context: ${topAffectedShopNames(task.affectedRows)}
             </div>
           </div>
         `;
