@@ -538,11 +538,16 @@
     }
 
     .leading-table table {
-      min-width: 1460px;
+      min-width: 1640px;
     }
 
     .leading-table th:first-child,
     .leading-table td:first-child {
+      min-width: 260px;
+    }
+
+    .leading-table th:nth-child(2),
+    .leading-table td:nth-child(2) {
       min-width: 270px;
     }
 
@@ -885,6 +890,7 @@
             <table>
               <thead>
                 <tr>
+                  <th>Shop</th>
                   <th>Task</th>
                   <th class="num">6mo Avg</th>
                   <th class="num">Weekly Std Dev</th>
@@ -2174,14 +2180,21 @@
       return flags;
     }
 
-    function buildTaskWeeklySeries() {
-      const taskWeeks = new Map();
+    function buildShopTaskWeeklySeries() {
+      const shopTaskWeeks = new Map();
 
       rows.forEach(row => {
         if (isTrendExcludedTask(row.task)) return;
-        if (!taskWeeks.has(row.task)) taskWeeks.set(row.task, new Map());
+        const groupKey = `${row.shop}\u0000${row.task}`;
+        if (!shopTaskWeeks.has(groupKey)) {
+          shopTaskWeeks.set(groupKey, {
+            shop: row.shop,
+            task: row.task,
+            weekMap: new Map()
+          });
+        }
 
-        const weekMap = taskWeeks.get(row.task);
+        const weekMap = shopTaskWeeks.get(groupKey).weekMap;
         (row.weekly || []).forEach(week => {
           const key = week.startDate || week.label;
           const existing = weekMap.get(key) || {
@@ -2195,9 +2208,10 @@
         });
       });
 
-      return [...taskWeeks.entries()].map(([task, weekMap]) => ({
-        task,
-        series: [...weekMap.values()]
+      return [...shopTaskWeeks.values()].map(group => ({
+        shop: group.shop,
+        task: group.task,
+        series: [...group.weekMap.values()]
           .filter(week => week.startDate)
           .sort((a, b) => weekStartTime(a) - weekStartTime(b))
       })).filter(item => item.series.length > 0);
@@ -2207,7 +2221,7 @@
       const asOfDate = new Date(`${dashboardData.asOfDate}T00:00:00`);
       const currentKey = monthKey(asOfDate);
 
-      return buildTaskWeeklySeries().map(item => {
+      return buildShopTaskWeeklySeries().map(item => {
         const trailingWeeks = item.series
           .filter(week => {
             const weekDate = new Date(`${week.startDate}T00:00:00`);
@@ -2228,6 +2242,7 @@
         const flag = trailingAverage > 0 && hasSustainedThresholdDrop(item.series, threshold.value);
 
         return {
+          shop: item.shop,
           task: item.task,
           trailingAverage,
           weeklyStdDev,
@@ -2245,6 +2260,7 @@
           Number(b.flag) - Number(a.flag) ||
           a.change - b.change ||
           b.trailingAverage - a.trailingAverage ||
+          a.shop.localeCompare(b.shop) ||
           a.task.localeCompare(b.task)
         );
     }
@@ -2256,9 +2272,9 @@
 
       document.getElementById("leadingSummary").innerHTML = `
         <article class="metric-card">
-          <p class="metric-label">Flagged Tasks</p>
+          <p class="metric-label">Flagged Shop Tasks</p>
           <p class="metric-value">${formatNumber(flaggedRows.length)}</p>
-          <p class="metric-note">Sustained two-week declines below task-specific thresholds.</p>
+          <p class="metric-note">Sustained two-week declines below shop/task thresholds.</p>
         </article>
         <article class="metric-card">
           <p class="metric-label">Backtest Flags</p>
@@ -2268,7 +2284,7 @@
         <article class="metric-card">
           <p class="metric-label">Limited History</p>
           <p class="metric-value">${formatNumber(limitedHistoryRows.length)}</p>
-          <p class="metric-note">Tasks using the 15% fallback threshold.</p>
+          <p class="metric-note">Shop/task rows using the 15% fallback threshold.</p>
         </article>
       `;
     }
@@ -2280,6 +2296,7 @@
       document.getElementById("leadingIndicatorRows").innerHTML = indicatorRows.length
         ? indicatorRows.map(row => `
           <tr class="${row.flag ? "row-critical" : ""}">
+            <td>${row.shop}</td>
             <td>${row.task}</td>
             <td class="num">${formatNumber(Math.round(row.trailingAverage))}</td>
             <td class="num">${row.weeklyStdDev.toFixed(1)}</td>
@@ -2294,7 +2311,7 @@
         `).join("")
         : `
           <tr>
-            <td colspan="10">No weekly task history is available for leading indicator analysis.</td>
+            <td colspan="11">No weekly task history is available for leading indicator analysis.</td>
           </tr>
         `;
     }
