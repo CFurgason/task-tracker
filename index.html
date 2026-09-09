@@ -530,6 +530,33 @@
       align-items: start;
     }
 
+    .leading-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .leading-table table {
+      min-width: 1460px;
+    }
+
+    .leading-table th:first-child,
+    .leading-table td:first-child {
+      min-width: 270px;
+    }
+
+    .leading-table td {
+      white-space: nowrap;
+    }
+
+    .leading-note {
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.35;
+      padding: 0 18px 16px;
+    }
+
     .trend-task-list {
       display: grid;
       gap: 10px;
@@ -705,6 +732,7 @@
       .dashboard-grid,
       .all-shop-alert,
       .trend-summary,
+      .leading-summary,
       .trend-page-grid,
       .trend-task-stats,
       .urgent-groups {
@@ -846,12 +874,44 @@
         </section>
       </div>
 
+      <div id="leadingIndicators" class="view">
+        <section class="leading-summary" id="leadingSummary" aria-label="Leading indicator summary"></section>
+        <section class="panel leading-table">
+          <div class="panel-head">
+            <h2 class="panel-title">Call Volume Leading Indicators</h2>
+            <span class="panel-note">Volatility-adjusted task risk</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th class="num">6mo Avg</th>
+                  <th class="num">Weekly Std Dev</th>
+                  <th class="num">Current Month Avg</th>
+                  <th class="num">% Change</th>
+                  <th class="num">Month+1 Projection</th>
+                  <th class="num">Month+2 Projection</th>
+                  <th>Threshold Used</th>
+                  <th>Flag</th>
+                  <th class="num">Backtest Flag Count</th>
+                </tr>
+              </thead>
+              <tbody id="leadingIndicatorRows"></tbody>
+            </table>
+          </div>
+          <div class="leading-note">
+            Backtest counts show how often the current flag logic would have triggered in the available trailing data. Confirming true drops versus holidays or other known events requires annotated historical context.
+          </div>
+        </section>
+      </div>
+
     </main>
   </div>
 
   <script src="google-sheets-config.js"></script>
   <script>
-    window.TASK_TRACKER_DASHBOARD_VERSION = "all-shop-task-trends-exclude-no-recent-2026-09-08";
+    window.TASK_TRACKER_DASHBOARD_VERSION = "leading-indicators-page-2026-09-09";
 
     function normalizeTaskName(value) {
       return String(value || "")
@@ -1197,6 +1257,7 @@
       viewSelector.innerHTML = `
         <option value="urgentDrops">Urgent Drops</option>
         <option value="decliningTrends">Declining Trends</option>
+        <option value="leadingIndicators">Leading Indicators</option>
       `;
       taskFilter.innerHTML = '<option value="All">All Tasks</option>';
       addOptions(viewSelector, uniqueValues("store"));
@@ -1276,7 +1337,7 @@
     }
 
     function isShopPage() {
-      return !["urgentDrops", "decliningTrends"].includes(viewSelector.value);
+      return !["urgentDrops", "decliningTrends", "leadingIndicators"].includes(viewSelector.value);
     }
 
     function selectedStoreRows() {
@@ -2012,6 +2073,232 @@
       );
     }
 
+    function weekStartTime(week) {
+      return new Date(`${week.startDate}T00:00:00`).getTime();
+    }
+
+    function monthKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function standardDeviation(values) {
+      if (!values.length) return 0;
+      const mean = average(values);
+      const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / values.length;
+      return Math.sqrt(variance);
+    }
+
+    function currentMonthWeight(weekCount, maxWeight) {
+      return Math.min(maxWeight, (Math.max(0, weekCount) / 4) * maxWeight);
+    }
+
+    function daysInclusive(startDate, endDate) {
+      return Math.max(0, Math.floor((endDate - startDate) / 86400000) + 1);
+    }
+
+    function currentMonthWeeklyRate(series, asOfDate) {
+      const monthStart = new Date(asOfDate.getFullYear(), asOfDate.getMonth(), 1);
+      let proratedCalls = 0;
+      let observedDays = 0;
+
+      series.forEach(week => {
+        const weekStart = new Date(`${week.startDate}T00:00:00`);
+        const weekEnd = new Date(`${week.endDate || week.startDate}T00:00:00`);
+        const overlapStart = new Date(Math.max(weekStart.getTime(), monthStart.getTime()));
+        const overlapEnd = new Date(Math.min(weekEnd.getTime(), asOfDate.getTime()));
+        const overlapDays = daysInclusive(overlapStart, overlapEnd);
+        if (overlapDays <= 0) return;
+
+        const weekDays = Math.max(1, daysInclusive(weekStart, weekEnd));
+        proratedCalls += numericValue(week.calls) * (overlapDays / weekDays);
+        observedDays += overlapDays;
+      });
+
+      return {
+        average: observedDays > 0 ? (proratedCalls / observedDays) * 7 : 0,
+        observedWeeks: observedDays / 7
+      };
+    }
+
+    function thresholdDetails(trailingAverage, weeklyStdDev, historyWeekCount) {
+      if (historyWeekCount < 8) {
+        return {
+          value: trailingAverage * 0.85,
+          label: `15% below avg (<= ${formatNumber(Math.round(trailingAverage * 0.85))})`
+        };
+      }
+
+      return {
+        value: trailingAverage - (2 * weeklyStdDev),
+        label: `2 std dev below avg (<= ${formatNumber(Math.max(0, Math.round(trailingAverage - (2 * weeklyStdDev))))})`
+      };
+    }
+
+    function hasSustainedThresholdDrop(series, threshold) {
+      if (series.length < 3) return false;
+      const last = series[series.length - 1].calls;
+      const prior = series[series.length - 2].calls;
+      const beforePrior = series[series.length - 3].calls;
+      return last < threshold && prior < threshold && last < prior && prior < beforePrior;
+    }
+
+    function countBacktestFlags(series, asOfDate) {
+      const earliest = new Date(asOfDate);
+      earliest.setMonth(earliest.getMonth() - 12);
+
+      let flags = 0;
+      for (let index = 2; index < series.length; index += 1) {
+        const currentWeekDate = new Date(`${series[index].startDate}T00:00:00`);
+        if (currentWeekDate < earliest) continue;
+
+        const currentKey = monthKey(currentWeekDate);
+        const baseline = series
+          .slice(0, index)
+          .filter(week => monthKey(new Date(`${week.startDate}T00:00:00`)) !== currentKey)
+          .slice(-26)
+          .map(week => week.calls);
+
+        if (!baseline.length) continue;
+
+        const baselineAverage = average(baseline);
+        const baselineStdDev = standardDeviation(baseline);
+        const threshold = thresholdDetails(baselineAverage, baselineStdDev, baseline.length).value;
+        const testWindow = series.slice(0, index + 1);
+
+        if (hasSustainedThresholdDrop(testWindow, threshold)) {
+          flags += 1;
+          index += 1;
+        }
+      }
+
+      return flags;
+    }
+
+    function buildTaskWeeklySeries() {
+      const taskWeeks = new Map();
+
+      rows.forEach(row => {
+        if (isTrendExcludedTask(row.task)) return;
+        if (!taskWeeks.has(row.task)) taskWeeks.set(row.task, new Map());
+
+        const weekMap = taskWeeks.get(row.task);
+        (row.weekly || []).forEach(week => {
+          const key = week.startDate || week.label;
+          const existing = weekMap.get(key) || {
+            label: week.label,
+            startDate: week.startDate,
+            endDate: week.endDate,
+            calls: 0
+          };
+          existing.calls += numericValue(week.calls);
+          weekMap.set(key, existing);
+        });
+      });
+
+      return [...taskWeeks.entries()].map(([task, weekMap]) => ({
+        task,
+        series: [...weekMap.values()]
+          .filter(week => week.startDate)
+          .sort((a, b) => weekStartTime(a) - weekStartTime(b))
+      })).filter(item => item.series.length > 0);
+    }
+
+    function getLeadingIndicatorRows() {
+      const asOfDate = new Date(`${dashboardData.asOfDate}T00:00:00`);
+      const currentKey = monthKey(asOfDate);
+
+      return buildTaskWeeklySeries().map(item => {
+        const trailingWeeks = item.series
+          .filter(week => {
+            const weekDate = new Date(`${week.startDate}T00:00:00`);
+            return weekDate <= asOfDate && monthKey(weekDate) !== currentKey;
+          })
+          .slice(-26);
+        const trailingValues = trailingWeeks.map(week => week.calls);
+        const currentMonth = currentMonthWeeklyRate(item.series, asOfDate);
+        const trailingAverage = average(trailingValues);
+        const weeklyStdDev = standardDeviation(trailingValues);
+        const currentMonthAverage = currentMonth.average;
+        const change = percentChange(currentMonthAverage, trailingAverage);
+        const monthOneWeight = currentMonthWeight(currentMonth.observedWeeks, 0.70);
+        const monthTwoWeight = currentMonthWeight(currentMonth.observedWeeks, 0.85);
+        const monthOneProjection = (trailingAverage * (1 - monthOneWeight)) + (currentMonthAverage * monthOneWeight);
+        const monthTwoProjection = (trailingAverage * (1 - monthTwoWeight)) + (currentMonthAverage * monthTwoWeight);
+        const threshold = thresholdDetails(trailingAverage, weeklyStdDev, trailingValues.length);
+        const flag = trailingAverage > 0 && hasSustainedThresholdDrop(item.series, threshold.value);
+
+        return {
+          task: item.task,
+          trailingAverage,
+          weeklyStdDev,
+          currentMonthAverage,
+          change,
+          monthOneProjection,
+          monthTwoProjection,
+          threshold,
+          flag,
+          backtestFlagCount: countBacktestFlags(item.series, asOfDate),
+          historyWeekCount: trailingValues.length
+        };
+      }).filter(row => row.trailingAverage > 0 || row.currentMonthAverage > 0)
+        .sort((a, b) =>
+          Number(b.flag) - Number(a.flag) ||
+          a.change - b.change ||
+          b.trailingAverage - a.trailingAverage ||
+          a.task.localeCompare(b.task)
+        );
+    }
+
+    function renderLeadingSummary(indicatorRows) {
+      const flaggedRows = indicatorRows.filter(row => row.flag);
+      const limitedHistoryRows = indicatorRows.filter(row => row.historyWeekCount < 8);
+      const backtestFlags = indicatorRows.reduce((total, row) => total + row.backtestFlagCount, 0);
+
+      document.getElementById("leadingSummary").innerHTML = `
+        <article class="metric-card">
+          <p class="metric-label">Flagged Tasks</p>
+          <p class="metric-value">${formatNumber(flaggedRows.length)}</p>
+          <p class="metric-note">Sustained two-week declines below task-specific thresholds.</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Backtest Flags</p>
+          <p class="metric-value">${formatNumber(backtestFlags)}</p>
+          <p class="metric-note">Total historical triggers across monitored tasks.</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Limited History</p>
+          <p class="metric-value">${formatNumber(limitedHistoryRows.length)}</p>
+          <p class="metric-note">Tasks using the 15% fallback threshold.</p>
+        </article>
+      `;
+    }
+
+    function renderLeadingIndicators() {
+      const indicatorRows = getLeadingIndicatorRows();
+      renderLeadingSummary(indicatorRows);
+
+      document.getElementById("leadingIndicatorRows").innerHTML = indicatorRows.length
+        ? indicatorRows.map(row => `
+          <tr class="${row.flag ? "row-critical" : ""}">
+            <td>${row.task}</td>
+            <td class="num">${formatNumber(Math.round(row.trailingAverage))}</td>
+            <td class="num">${row.weeklyStdDev.toFixed(1)}</td>
+            <td class="num">${formatNumber(Math.round(row.currentMonthAverage))}</td>
+            <td class="num ${row.change < 0 ? "trend-down" : "trend-up"}">${row.change.toFixed(1)}%</td>
+            <td class="num">${formatNumber(Math.round(row.monthOneProjection))}</td>
+            <td class="num">${formatNumber(Math.round(row.monthTwoProjection))}</td>
+            <td>${row.threshold.label}</td>
+            <td><span class="badge badge-${row.flag ? "red" : "ok"}">${row.flag ? "Y" : "N"}</span></td>
+            <td class="num">${formatNumber(row.backtestFlagCount)}</td>
+          </tr>
+        `).join("")
+        : `
+          <tr>
+            <td colspan="10">No weekly task history is available for leading indicator analysis.</td>
+          </tr>
+        `;
+    }
+
     function setActiveView() {
       const shopPage = isShopPage();
       document.querySelectorAll(".view").forEach(view => {
@@ -2042,6 +2329,7 @@
       renderAllShopAlert();
       renderUrgentDrops();
       renderDecliningTrends();
+      renderLeadingIndicators();
       setActiveView();
       syncWarningPanelHeight();
     }
