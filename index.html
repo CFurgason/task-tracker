@@ -532,13 +532,13 @@
 
     .leading-summary {
       display: grid;
-      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      grid-template-columns: repeat(4, minmax(220px, 1fr));
       gap: 14px;
       margin-bottom: 18px;
     }
 
     .leading-table table {
-      min-width: 1640px;
+      min-width: 1840px;
     }
 
     .leading-table th:first-child,
@@ -899,6 +899,8 @@
                   <th class="num">Month+1 Projection</th>
                   <th class="num">Month+2 Projection</th>
                   <th>Threshold Used</th>
+                  <th class="num">Days Since Call</th>
+                  <th class="num">History Weeks</th>
                   <th>Flag</th>
                   <th class="num">Backtest Flag Count</th>
                 </tr>
@@ -907,7 +909,7 @@
             </table>
           </div>
           <div class="leading-note">
-            Backtest counts show how often the current flag logic would have triggered in the available trailing data. Confirming true drops versus holidays or other known events requires annotated historical context.
+            The 6mo average uses up to 26 trailing weeks and excludes any week overlapping the current partial month. If fewer than 26 history weeks are loaded, the table shows the available count. Backtest counts use available trailing data only; confirming true drops versus holidays or known events requires annotated historical context.
           </div>
         </section>
       </div>
@@ -2083,10 +2085,6 @@
       return new Date(`${week.startDate}T00:00:00`).getTime();
     }
 
-    function monthKey(date) {
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    }
-
     function standardDeviation(values) {
       if (!values.length) return 0;
       const mean = average(values);
@@ -2126,26 +2124,41 @@
       };
     }
 
+    function weekOverlapsMonth(week, date) {
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const nextMonthStart = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      const weekStart = new Date(`${week.startDate}T00:00:00`);
+      const weekEnd = new Date(`${week.endDate || week.startDate}T00:00:00`);
+      return weekStart < nextMonthStart && weekEnd >= monthStart;
+    }
+
     function thresholdDetails(trailingAverage, weeklyStdDev, historyWeekCount) {
       if (historyWeekCount < 8) {
+        const threshold = trailingAverage * 0.85;
         return {
-          value: trailingAverage * 0.85,
-          label: `15% below avg (<= ${formatNumber(Math.round(trailingAverage * 0.85))})`
+          value: threshold,
+          label: `15% below avg (<= ${formatNumber(Math.round(threshold))})`
         };
       }
 
+      const threshold = Math.max(0, trailingAverage - (2 * weeklyStdDev));
       return {
-        value: trailingAverage - (2 * weeklyStdDev),
-        label: `2 std dev below avg (<= ${formatNumber(Math.max(0, Math.round(trailingAverage - (2 * weeklyStdDev))))})`
+        value: threshold,
+        label: `2 std dev below avg (<= ${formatNumber(Math.round(threshold))})`
       };
     }
 
-    function hasSustainedThresholdDrop(series, threshold) {
-      if (series.length < 3) return false;
+    function hasSustainedThresholdDrop(series, threshold, baselineAverage) {
+      if (series.length < 4 || baselineAverage <= 0) return false;
       const last = series[series.length - 1].calls;
       const prior = series[series.length - 2].calls;
-      const beforePrior = series[series.length - 3].calls;
-      return last < threshold && prior < threshold && last < prior && prior < beforePrior;
+      const priorTwoWeekAverage = average(series.slice(Math.max(0, series.length - 4), series.length - 2).map(week => week.calls));
+      const currentTwoWeekAverage = average([prior, last]);
+
+      return last <= threshold &&
+        prior <= threshold &&
+        currentTwoWeekAverage < baselineAverage &&
+        (currentTwoWeekAverage < priorTwoWeekAverage || currentTwoWeekAverage === 0);
     }
 
     function countBacktestFlags(series, asOfDate) {
@@ -2157,10 +2170,9 @@
         const currentWeekDate = new Date(`${series[index].startDate}T00:00:00`);
         if (currentWeekDate < earliest) continue;
 
-        const currentKey = monthKey(currentWeekDate);
         const baseline = series
           .slice(0, index)
-          .filter(week => monthKey(new Date(`${week.startDate}T00:00:00`)) !== currentKey)
+          .filter(week => !weekOverlapsMonth(week, currentWeekDate))
           .slice(-26)
           .map(week => week.calls);
 
@@ -2171,7 +2183,7 @@
         const threshold = thresholdDetails(baselineAverage, baselineStdDev, baseline.length).value;
         const testWindow = series.slice(0, index + 1);
 
-        if (hasSustainedThresholdDrop(testWindow, threshold)) {
+        if (hasSustainedThresholdDrop(testWindow, threshold, baselineAverage)) {
           flags += 1;
           index += 1;
         }
@@ -2191,8 +2203,12 @@
           shopTaskWeeks.set(groupKey, {
             shop: shopName,
             task: row.task,
+            daysSinceCall: numericValue(row.daysSinceCall),
             weekMap: new Map()
           });
+        } else {
+          const group = shopTaskWeeks.get(groupKey);
+          group.daysSinceCall = Math.min(group.daysSinceCall, numericValue(row.daysSinceCall));
         }
 
         const weekMap = shopTaskWeeks.get(groupKey).weekMap;
@@ -2212,6 +2228,7 @@
       return [...shopTaskWeeks.values()].map(group => ({
         shop: group.shop,
         task: group.task,
+        daysSinceCall: group.daysSinceCall,
         series: [...group.weekMap.values()]
           .filter(week => week.startDate)
           .sort((a, b) => weekStartTime(a) - weekStartTime(b))
@@ -2220,13 +2237,12 @@
 
     function getLeadingIndicatorRows() {
       const asOfDate = new Date(`${dashboardData.asOfDate}T00:00:00`);
-      const currentKey = monthKey(asOfDate);
 
       return buildShopTaskWeeklySeries().map(item => {
         const trailingWeeks = item.series
           .filter(week => {
-            const weekDate = new Date(`${week.startDate}T00:00:00`);
-            return weekDate <= asOfDate && monthKey(weekDate) !== currentKey;
+            const weekStartDate = new Date(`${week.startDate}T00:00:00`);
+            return weekStartDate <= asOfDate && !weekOverlapsMonth(week, asOfDate);
           })
           .slice(-26);
         const trailingValues = trailingWeeks.map(week => week.calls);
@@ -2240,7 +2256,7 @@
         const monthOneProjection = (trailingAverage * (1 - monthOneWeight)) + (currentMonthAverage * monthOneWeight);
         const monthTwoProjection = (trailingAverage * (1 - monthTwoWeight)) + (currentMonthAverage * monthTwoWeight);
         const threshold = thresholdDetails(trailingAverage, weeklyStdDev, trailingValues.length);
-        const flag = trailingAverage > 0 && hasSustainedThresholdDrop(item.series, threshold.value);
+        const flag = hasSustainedThresholdDrop(item.series, threshold.value, trailingAverage);
 
         return {
           shop: item.shop,
@@ -2254,7 +2270,8 @@
           threshold,
           flag,
           backtestFlagCount: countBacktestFlags(item.series, asOfDate),
-          historyWeekCount: trailingValues.length
+          historyWeekCount: trailingValues.length,
+          daysSinceCall: item.daysSinceCall
         };
       }).filter(row => row.trailingAverage > 0 || row.currentMonthAverage > 0)
         .sort((a, b) =>
@@ -2269,6 +2286,7 @@
     function renderLeadingSummary(indicatorRows) {
       const flaggedRows = indicatorRows.filter(row => row.flag);
       const limitedHistoryRows = indicatorRows.filter(row => row.historyWeekCount < 8);
+      const shortSixMonthRows = indicatorRows.filter(row => row.historyWeekCount < 26);
       const backtestFlags = indicatorRows.reduce((total, row) => total + row.backtestFlagCount, 0);
 
       document.getElementById("leadingSummary").innerHTML = `
@@ -2281,6 +2299,11 @@
           <p class="metric-label">Backtest Flags</p>
           <p class="metric-value">${formatNumber(backtestFlags)}</p>
           <p class="metric-note">Total historical triggers across monitored tasks.</p>
+        </article>
+        <article class="metric-card">
+          <p class="metric-label">Short 6mo History</p>
+          <p class="metric-value">${formatNumber(shortSixMonthRows.length)}</p>
+          <p class="metric-note">Rows using available history below 26 weeks.</p>
         </article>
         <article class="metric-card">
           <p class="metric-label">Limited History</p>
@@ -2306,13 +2329,15 @@
             <td class="num">${formatNumber(Math.round(row.monthOneProjection))}</td>
             <td class="num">${formatNumber(Math.round(row.monthTwoProjection))}</td>
             <td>${row.threshold.label}</td>
+            <td class="num">${formatNumber(row.daysSinceCall)}</td>
+            <td class="num">${formatNumber(row.historyWeekCount)}</td>
             <td><span class="badge badge-${row.flag ? "red" : "ok"}">${row.flag ? "Y" : "N"}</span></td>
             <td class="num">${formatNumber(row.backtestFlagCount)}</td>
           </tr>
         `).join("")
         : `
           <tr>
-            <td colspan="11">No weekly task history is available for leading indicator analysis.</td>
+            <td colspan="13">No weekly task history is available for leading indicator analysis.</td>
           </tr>
         `;
     }
