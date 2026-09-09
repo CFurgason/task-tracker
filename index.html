@@ -541,6 +541,11 @@
       min-width: 1840px;
     }
 
+    .leading-task-tables {
+      display: grid;
+      gap: 18px;
+    }
+
     .leading-table th:first-child,
     .leading-table td:first-child {
       min-width: 260px;
@@ -548,7 +553,7 @@
 
     .leading-table th:nth-child(2),
     .leading-table td:nth-child(2) {
-      min-width: 270px;
+      min-width: 0;
     }
 
     .leading-table td {
@@ -881,37 +886,7 @@
 
       <div id="leadingIndicators" class="view">
         <section class="leading-summary" id="leadingSummary" aria-label="Leading indicator summary"></section>
-        <section class="panel leading-table">
-          <div class="panel-head">
-            <h2 class="panel-title">Call Volume Leading Indicators</h2>
-            <span class="panel-note">Volatility-adjusted task risk</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Shop</th>
-                  <th>Task</th>
-                  <th class="num">6mo Avg</th>
-                  <th class="num">Weekly Std Dev</th>
-                  <th class="num">Current Month Avg</th>
-                  <th class="num">% Change</th>
-                  <th class="num">Month+1 Projection</th>
-                  <th class="num">Month+2 Projection</th>
-                  <th>Threshold Used</th>
-                  <th class="num">Days Since Call</th>
-                  <th class="num">History Weeks</th>
-                  <th>Flag</th>
-                  <th class="num">Backtest Flag Count</th>
-                </tr>
-              </thead>
-              <tbody id="leadingIndicatorRows"></tbody>
-            </table>
-          </div>
-          <div class="leading-note">
-            The 6mo average uses up to 26 trailing weeks and excludes any week overlapping the current partial month. If fewer than 26 history weeks are loaded, the table shows the available count. Backtest counts use available trailing data only; confirming true drops versus holidays or known events requires annotated historical context.
-          </div>
-        </section>
+        <section class="leading-task-tables" id="leadingTaskTables" aria-label="Leading indicators grouped by task type"></section>
       </div>
 
     </main>
@@ -2313,32 +2288,87 @@
       `;
     }
 
+    function leadingTaskTableHtml(task, taskRows) {
+      const flaggedCount = taskRows.filter(row => row.flag).length;
+      const body = taskRows.map(row => `
+        <tr class="${row.flag ? "row-critical" : ""}">
+          <td>${row.shop}</td>
+          <td class="num">${formatNumber(Math.round(row.trailingAverage))}</td>
+          <td class="num">${row.weeklyStdDev.toFixed(1)}</td>
+          <td class="num">${formatNumber(Math.round(row.currentMonthAverage))}</td>
+          <td class="num ${row.change < 0 ? "trend-down" : "trend-up"}">${row.change.toFixed(1)}%</td>
+          <td class="num">${formatNumber(Math.round(row.monthOneProjection))}</td>
+          <td class="num">${formatNumber(Math.round(row.monthTwoProjection))}</td>
+          <td>${row.threshold.label}</td>
+          <td class="num">${formatNumber(row.daysSinceCall)}</td>
+          <td class="num">${formatNumber(row.historyWeekCount)}</td>
+          <td><span class="badge badge-${row.flag ? "red" : "ok"}">${row.flag ? "Y" : "N"}</span></td>
+          <td class="num">${formatNumber(row.backtestFlagCount)}</td>
+        </tr>
+      `).join("");
+
+      return `
+        <article class="panel leading-table">
+          <div class="panel-head">
+            <h2 class="panel-title">${task}</h2>
+            <span class="panel-note">${taskRows.length} shop${taskRows.length === 1 ? "" : "s"}; ${flaggedCount} flagged</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Shop</th>
+                  <th class="num">6mo Avg</th>
+                  <th class="num">Weekly Std Dev</th>
+                  <th class="num">Current Month Avg</th>
+                  <th class="num">% Change</th>
+                  <th class="num">Month+1 Projection</th>
+                  <th class="num">Month+2 Projection</th>
+                  <th>Threshold Used</th>
+                  <th class="num">Days Since Call</th>
+                  <th class="num">History Weeks</th>
+                  <th>Flag</th>
+                  <th class="num">Backtest Flag Count</th>
+                </tr>
+              </thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>
+          <div class="leading-note">
+            The 6mo average uses up to 26 trailing weeks and excludes any week overlapping the current partial month. If fewer than 26 history weeks are loaded, the table shows the available count. Backtest counts use available trailing data only; confirming true drops versus holidays or known events requires annotated historical context.
+          </div>
+        </article>
+      `;
+    }
+
     function renderLeadingIndicators() {
       const indicatorRows = getLeadingIndicatorRows();
       renderLeadingSummary(indicatorRows);
 
-      document.getElementById("leadingIndicatorRows").innerHTML = indicatorRows.length
-        ? indicatorRows.map(row => `
-          <tr class="${row.flag ? "row-critical" : ""}">
-            <td>${row.shop}</td>
-            <td>${row.task}</td>
-            <td class="num">${formatNumber(Math.round(row.trailingAverage))}</td>
-            <td class="num">${row.weeklyStdDev.toFixed(1)}</td>
-            <td class="num">${formatNumber(Math.round(row.currentMonthAverage))}</td>
-            <td class="num ${row.change < 0 ? "trend-down" : "trend-up"}">${row.change.toFixed(1)}%</td>
-            <td class="num">${formatNumber(Math.round(row.monthOneProjection))}</td>
-            <td class="num">${formatNumber(Math.round(row.monthTwoProjection))}</td>
-            <td>${row.threshold.label}</td>
-            <td class="num">${formatNumber(row.daysSinceCall)}</td>
-            <td class="num">${formatNumber(row.historyWeekCount)}</td>
-            <td><span class="badge badge-${row.flag ? "red" : "ok"}">${row.flag ? "Y" : "N"}</span></td>
-            <td class="num">${formatNumber(row.backtestFlagCount)}</td>
-          </tr>
-        `).join("")
+      const groupedRows = indicatorRows.reduce((groups, row) => {
+        if (!groups.has(row.task)) groups.set(row.task, []);
+        groups.get(row.task).push(row);
+        return groups;
+      }, new Map());
+
+      document.getElementById("leadingTaskTables").innerHTML = groupedRows.size
+        ? [...groupedRows.entries()]
+          .sort(([taskA, rowsA], [taskB, rowsB]) =>
+            Number(rowsB.some(row => row.flag)) - Number(rowsA.some(row => row.flag)) ||
+            taskA.localeCompare(taskB)
+          )
+          .map(([task, taskRows]) => leadingTaskTableHtml(task, taskRows))
+          .join("")
         : `
-          <tr>
-            <td colspan="13">No weekly task history is available for leading indicator analysis.</td>
-          </tr>
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">No Leading Indicator Data</h2>
+              <span class="panel-note">No weekly task history available</span>
+            </div>
+            <div class="alerts">
+              <div class="empty-alerts">No weekly task history is available for leading indicator analysis.</div>
+            </div>
+          </article>
         `;
     }
 
