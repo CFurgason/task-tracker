@@ -2185,10 +2185,11 @@
 
       rows.forEach(row => {
         if (isTrendExcludedTask(row.task)) return;
-        const groupKey = `${row.shop}\u0000${row.task}`;
+        const shopName = row.shop || row.store || "";
+        const groupKey = `${shopName}\u0000${row.task}`;
         if (!shopTaskWeeks.has(groupKey)) {
           shopTaskWeeks.set(groupKey, {
-            shop: row.shop,
+            shop: shopName,
             task: row.task,
             weekMap: new Map()
           });
