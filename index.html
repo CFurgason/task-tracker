@@ -2343,9 +2343,10 @@
 
     function renderLeadingIndicators() {
       const indicatorRows = getLeadingIndicatorRows();
+      const flaggedRows = indicatorRows.filter(row => row.flag);
       renderLeadingSummary(indicatorRows);
 
-      const groupedRows = indicatorRows.reduce((groups, row) => {
+      const groupedRows = flaggedRows.reduce((groups, row) => {
         if (!groups.has(row.task)) groups.set(row.task, []);
         groups.get(row.task).push(row);
         return groups;
@@ -2362,11 +2363,11 @@
         : `
           <article class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">No Leading Indicator Data</h2>
-              <span class="panel-note">No weekly task history available</span>
+              <h2 class="panel-title">No Flagged Leading Indicators</h2>
+              <span class="panel-note">No shop/task rows currently flagged</span>
             </div>
             <div class="alerts">
-              <div class="empty-alerts">No weekly task history is available for leading indicator analysis.</div>
+              <div class="empty-alerts">No shop/task combinations currently meet the sustained volatility-adjusted drop criteria.</div>
             </div>
           </article>
         `;
