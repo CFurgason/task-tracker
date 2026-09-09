@@ -908,7 +908,10 @@
       googleSheetCsvUrl: new URLSearchParams(window.location.search).get("sheetCsv")
         || (window.TASK_TRACKER_GOOGLE_SHEET_CSV_URL || ""),
       fallbackJsonUrl: "task-tracker-data.json",
-      excludedShops: new Set(["Redwood General Tire"]),
+      excludedShops: new Set([
+        "Redwood General Tire",
+        "Chapel Hill Tire - Carrboro NC"
+      ]),
       excludedTasks: new Set([
         "Welcome New Customer",
         "Welcome New Vehicle",
@@ -933,6 +936,16 @@
 
     function isExcludedTask(task) {
       return dashboardConfig.excludedTasks.has(normalizeTaskName(task));
+    }
+
+    function shopName(row) {
+      return row.shop || row.store || "";
+    }
+
+    function isExcludedShop(shop) {
+      const normalizedShop = String(shop || "").trim();
+      return dashboardConfig.excludedShops.has(normalizedShop) ||
+        normalizedShop.toLowerCase().includes("chapel hill");
     }
 
     function isTrendExcludedTask(task) {
@@ -1057,7 +1070,7 @@
           item.shop &&
           item.task &&
           item.date &&
-          !dashboardConfig.excludedShops.has(item.shop) &&
+          !isExcludedShop(item.shop) &&
           !isExcludedTask(item.task)
         );
     }
@@ -1229,7 +1242,7 @@
         throw new Error(`Google Sheet failed: ${error.message}. Check google-sheets-config.js and confirm the published CSV URL is correct.`);
       }
 
-      rows = dashboardData.rows.filter(row => !isExcludedTask(row.task));
+      rows = dashboardData.rows.filter(row => !isExcludedShop(shopName(row)) && !isExcludedTask(row.task));
       initializeControls();
       renderDebugLine();
       renderDataDate();
@@ -2172,11 +2185,11 @@
 
       rows.forEach(row => {
         if (isTrendExcludedTask(row.task)) return;
-        const shopName = row.shop || row.store || "";
-        const groupKey = `${shopName}\u0000${row.task}`;
+        const groupShopName = shopName(row);
+        const groupKey = `${groupShopName}\u0000${row.task}`;
         if (!shopTaskWeeks.has(groupKey)) {
           shopTaskWeeks.set(groupKey, {
-            shop: shopName,
+            shop: groupShopName,
             task: row.task,
             daysSinceCall: numericValue(row.daysSinceCall),
             weekMap: new Map()
