@@ -777,16 +777,23 @@
       max-height: 72vh;
     }
 
+    #taskHeatMap {
+      width: calc(100vw - 48px);
+      margin-left: calc((min(var(--page-max), 100vw) - 100vw) / 2 + 24px);
+    }
+
     .heat-map-table {
-      min-width: 1500px;
+      min-width: 0;
       border-collapse: separate;
       border-spacing: 0;
     }
 
     .heat-map-table th,
     .heat-map-table td {
-      min-width: 116px;
-      padding: 8px;
+      width: 86px;
+      min-width: 86px;
+      max-width: 86px;
+      padding: 6px;
       text-align: center;
       vertical-align: middle;
       border-right: 1px solid rgba(217, 224, 232, 0.72);
@@ -797,9 +804,9 @@
       position: sticky;
       left: 0;
       z-index: 2;
-      width: 280px;
-      min-width: 280px;
-      max-width: 280px;
+      width: 230px;
+      min-width: 230px;
+      max-width: 230px;
       background: #ffffff;
       text-align: left;
       box-shadow: 8px 0 12px rgba(23, 32, 51, 0.06);
@@ -809,7 +816,7 @@
       position: sticky;
       top: 0;
       z-index: 3;
-      height: 128px;
+      height: 116px;
       white-space: normal;
       line-height: 1.1;
       vertical-align: bottom;
@@ -822,28 +829,28 @@
 
     .heat-task-label {
       display: block;
-      transform: rotate(-34deg);
+      transform: rotate(-42deg);
       transform-origin: left bottom;
-      width: 150px;
-      margin-left: 18px;
-      font-size: 18px;
+      width: 132px;
+      margin-left: 12px;
+      font-size: 16px;
       text-align: left;
     }
 
     .heat-shop-name {
       font-weight: 700;
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1.2;
     }
 
     .heat-cell {
       border-radius: 6px;
-      min-height: 58px;
+      min-height: 50px;
       display: grid;
       align-items: center;
       justify-items: center;
       gap: 2px;
-      padding: 7px 6px;
+      padding: 6px 4px;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
     }
@@ -868,12 +875,12 @@
     }
 
     .heat-cell-count {
-      font-size: 24px;
+      font-size: 21px;
       line-height: 1;
     }
 
     .heat-cell-label {
-      font-size: 16px;
+      font-size: 13px;
       line-height: 1;
       text-transform: uppercase;
     }
@@ -903,6 +910,11 @@
       #leadingIndicators {
         margin-left: 0;
         margin-right: 0;
+      }
+
+      #taskHeatMap {
+        width: auto;
+        margin-left: 0;
       }
     }
 
