@@ -1,6 +1,7 @@
 param(
   [string]$XlsxPath = ".\tasks_on_dashboard.xlsx",
-  [string]$DataJsPath = ".\tasks-on-dashboard-data.js"
+  [string]$DataJsPath = ".\tasks-on-dashboard-data.js",
+  [string]$DashboardPath = ".\index.html"
 )
 
 $ErrorActionPreference = "Stop"
@@ -113,6 +114,23 @@ try {
 
   $json = $payload | ConvertTo-Json -Depth 8
   Set-Content -Path $DataJsPath -Value "window.TASKS_ON_DASHBOARD_DATA = $json;" -Encoding UTF8
+
+  if (Test-Path -Path $DashboardPath) {
+    $dashboardHtml = Get-Content -Path $DashboardPath -Raw
+    $inlinePattern = '<script id="tasksOnDashboardInlineData" type="application/json">.*?</script>'
+    $inlineReplacement = "<script id=""tasksOnDashboardInlineData"" type=""application/json"">$json</script>"
+    $updatedDashboardHtml = [regex]::Replace(
+      $dashboardHtml,
+      $inlinePattern,
+      [System.Text.RegularExpressions.MatchEvaluator]{ param($match) $inlineReplacement },
+      [System.Text.RegularExpressions.RegexOptions]::Singleline
+    )
+
+    if ($updatedDashboardHtml -ne $dashboardHtml) {
+      Set-Content -Path $DashboardPath -Value $updatedDashboardHtml -Encoding UTF8
+      Write-Host "Updated inline task switch fallback in $DashboardPath."
+    }
+  }
 
   Write-Host "Updated task switch data from $xlsx."
   Write-Host "Shops: $($shops.Count)"
