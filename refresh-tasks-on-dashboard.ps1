@@ -44,9 +44,14 @@ function Get-CellValue($Cell, $SharedStrings) {
   return $value
 }
 
+function ConvertTo-TaskSwitchKey($Value) {
+  return ([string]$Value).Normalize([Text.NormalizationForm]::FormKC).ToLowerInvariant() -replace "&", "and" -replace "[^a-z0-9]+", ""
+}
+
 $xlsx = Resolve-InputPath $XlsxPath
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::OpenRead($xlsx)
+Add-Type -AssemblyName System.IO.Compression
+$fileStream = [System.IO.File]::Open($xlsx, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+$zip = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Read, $false)
 
 try {
   $sheetEntry = $zip.GetEntry("xl/worksheets/sheet1.xml")
@@ -94,6 +99,10 @@ try {
       continue
     }
 
+    if ((ConvertTo-TaskSwitchKey $shop) -eq "shopswithcalls") {
+      continue
+    }
+
     $tasks = [ordered]@{}
     foreach ($taskColumn in $taskColumns) {
       $tasks[$taskColumn.Task] = if (([string]$cells[$taskColumn.Column]).Trim() -eq "1") { 1 } else { 0 }
@@ -138,4 +147,5 @@ try {
   Write-Host "Wrote: $DataJsPath"
 } finally {
   $zip.Dispose()
+  $fileStream.Dispose()
 }

@@ -1041,7 +1041,7 @@
         <section class="panel">
           <div class="panel-head">
             <h2 class="panel-title">Task Heat Map</h2>
-            <span class="panel-note">Green is on with calls in the current 7-day window; red is on with zero calls</span>
+            <span class="panel-note" id="heatMapNote">Green is on with calls in the current 7-day window; red is on with zero calls</span>
           </div>
           <div class="heat-map-scroll" id="heatMap"></div>
         </section>
@@ -1054,7 +1054,7 @@
   <script src="tasks-on-dashboard-data.js"></script>
   <script id="tasksOnDashboardInlineData" type="application/json">{
     "source":  "tasks_on_dashboard.xlsx",
-    "generatedAt":  "2026-09-18T10:29:30",
+    "generatedAt":  "2026-09-18T10:41:39",
     "tasks":  [
                   "Next Day Satisfaction",
                   "Welcome New Customer",
@@ -1597,27 +1597,6 @@
                                     "Service Overdue":  1,
                                     "No Recent Visits":  0,
                                     "Retention Re-Engage":  1
-                                }
-                  },
-                  {
-                      "shop":  "Shops with calls",
-                      "tasks":  {
-                                    "Next Day Satisfaction":  0,
-                                    "Welcome New Customer":  0,
-                                    "Welcome New Vehicle":  0,
-                                    "Returning Lost Vehicle":  0,
-                                    "Reservation No Show":  0,
-                                    "Pre-Book Oil Change (Syn)":  0,
-                                    "Reminder Oil Change (Std)":  0,
-                                    "Pre-Book State Inspection":  0,
-                                    "Reminder State Inspection":  0,
-                                    "Reminder BG Brakes":  0,
-                                    "Reminder BG Cooling":  0,
-                                    "Reminder BG Fuel":  0,
-                                    "Warranty Inspection":  0,
-                                    "Service Overdue":  0,
-                                    "No Recent Visits":  1,
-                                    "Retention Re-Engage":  0
                                 }
                   }
               ]
@@ -3177,7 +3156,7 @@
       let off = 0;
 
       const shops = source.shops
-        .filter(shop => shop?.shop && !isExcludedShop(shop.shop))
+        .filter(shop => shop?.shop && !isExcludedShop(shop.shop) && !isTaskSwitchSummaryRow(shop.shop))
         .map(shop => {
           const cells = source.tasks.map(task => {
             const isOn = numericValue(shop.tasks?.[task]) === 1;
@@ -3196,6 +3175,10 @@
         });
 
       return { source, tasks: source.tasks, shops, enabled, healthy, stopped, off };
+    }
+
+    function isTaskSwitchSummaryRow(shop) {
+      return normalizeHeatMapKey(shop) === "shopswithcalls";
     }
 
     function taskSwitchDataSource() {
@@ -3225,13 +3208,17 @@
     function renderTaskHeatMap() {
       const summary = document.getElementById("heatMapSummary");
       const heatMap = document.getElementById("heatMap");
+      const heatMapNote = document.getElementById("heatMapNote");
       const data = taskHeatMapData();
 
       if (!data.source) {
+        heatMapNote.textContent = "Task switch data was not found";
         summary.innerHTML = "";
         heatMap.innerHTML = `<div class="empty-alerts">Task switch data could not be loaded from tasks-on-dashboard-data.js.</div>`;
         return;
       }
+
+      heatMapNote.textContent = `${data.tasks.length} task columns loaded from ${data.source.source || "task switch data"}; scroll sideways to view all columns`;
 
       summary.innerHTML = [
         renderHeatMapMetric("Enabled tasks", data.enabled),
@@ -3325,6 +3312,7 @@
   </script>
 </body>
 </html>
+
 
 
 
