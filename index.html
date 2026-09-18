@@ -1186,6 +1186,34 @@
       return items.filter(item => item.date >= startDate && item.date <= endDate).length;
     }
 
+    function dateRange(items) {
+      let minTime = Infinity;
+      let maxTime = -Infinity;
+
+      items.forEach(item => {
+        const time = item.date?.getTime();
+        if (!Number.isFinite(time)) return;
+        if (time < minTime) minTime = time;
+        if (time > maxTime) maxTime = time;
+      });
+
+      return {
+        minDate: new Date(minTime),
+        maxDate: new Date(maxTime)
+      };
+    }
+
+    function latestTaskDate(items) {
+      let maxTime = -Infinity;
+
+      items.forEach(item => {
+        const time = item.date?.getTime();
+        if (Number.isFinite(time) && time > maxTime) maxTime = time;
+      });
+
+      return new Date(maxTime);
+    }
+
     function parseIdList(value) {
       return String(value || "")
         .split(",")
@@ -1240,8 +1268,7 @@
         throw new Error("No usable task rows were found in the Google Sheet CSV.");
       }
 
-      const minDate = new Date(Math.min(...taskRows.map(item => item.date.getTime())));
-      const maxDate = new Date(Math.max(...taskRows.map(item => item.date.getTime())));
+      const { minDate, maxDate } = dateRange(taskRows);
       const weekWindows = [];
       let weekEnd = new Date(maxDate);
 
@@ -1270,7 +1297,7 @@
         const previousFourWeekAvg = previousCounts.length
           ? previousCounts.reduce((sum, value) => sum + value, 0) / previousCounts.length
           : 0;
-        const lastDate = new Date(Math.max(...group.map(item => item.date.getTime())));
+        const lastDate = latestTaskDate(group);
 
         return {
           store: first.shop,
