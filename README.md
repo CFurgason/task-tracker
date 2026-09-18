@@ -9,8 +9,11 @@ The dashboard is now set up for GitHub Pages hosting with Google Sheets as the d
 - `index.html` is the GitHub Pages entry point.
 - `google-sheets-config.js` is where the Google Sheets CSV URL goes.
 - `task-tracker-data.json` is the fallback data file if the Google Sheet URL is blank or unavailable.
+- `tasks_on_dashboard.xlsx` controls which shops have each task turned on.
+- `tasks-on-dashboard-data.js` is the browser-friendly task switch data generated from `tasks_on_dashboard.xlsx`.
 - `codex_task_tracker.csv` is the raw export used to refresh the fallback JSON.
 - `refresh-task-tracker.ps1` rebuilds the fallback JSON from the CSV.
+- `refresh-tasks-on-dashboard.ps1` rebuilds `tasks-on-dashboard-data.js` from `tasks_on_dashboard.xlsx`.
 - `open-task-tracker.ps1` refreshes the dashboard and opens it in the default browser.
 - `open-task-tracker.cmd` and `refresh-task-tracker.cmd` are double-click friendly launchers for Windows.
 - `daily-update-dashboard.cmd` is the easiest daily updater. Drag the latest CSV onto it, or double-click it after replacing `codex_task_tracker.csv`.
@@ -45,6 +48,7 @@ index.html?sheetCsv=https%3A%2F%2Fdocs.google.com%2Fspreadsheets%2Fd%2Fe%2F...%2
 index.html
 google-sheets-config.js
 task-tracker-data.json
+tasks-on-dashboard-data.js
 .nojekyll
 ```
 
@@ -107,6 +111,8 @@ powershell -ExecutionPolicy Bypass -File .\refresh-task-tracker.ps1
 
 The script updates `task-tracker-data.json`.
 
+If `tasks_on_dashboard.xlsx` is present, the same refresh also updates `tasks-on-dashboard-data.js` for the Task Heat Map page.
+
 ## Preview the all-shop alert
 
 To force the all-shop alert to appear for layout review, open:
@@ -124,8 +130,11 @@ For GitHub Pages, share the repository Pages URL. For a shared-drive fallback ro
 - `index.html`
 - `google-sheets-config.js`
 - `task-tracker-data.json`
+- `tasks_on_dashboard.xlsx`
+- `tasks-on-dashboard-data.js`
 - `codex_task_tracker.csv`
 - `refresh-task-tracker.ps1`
+- `refresh-tasks-on-dashboard.ps1`
 - `open-task-tracker.ps1`
 - `refresh-task-tracker.cmd`
 - `open-task-tracker.cmd`
