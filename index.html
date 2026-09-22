@@ -120,6 +120,13 @@
       margin-bottom: 20px;
     }
 
+    body.leading-indicators-active .controls {
+      width: calc(100% + 4in);
+      max-width: none;
+      margin-left: -2in;
+      margin-right: -2in;
+    }
+
     .control {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -1018,6 +1025,12 @@
       }
 
       #leadingIndicators {
+        width: auto;
+        margin-left: 0;
+        margin-right: 0;
+      }
+
+      body.leading-indicators-active .controls {
         width: auto;
         margin-left: 0;
         margin-right: 0;
@@ -3413,6 +3426,7 @@
 
     function setActiveView() {
       const shopPage = isShopPage();
+      document.body.classList.toggle("leading-indicators-active", !shopPage && viewSelector.value === "leadingIndicators");
       document.querySelectorAll(".view").forEach(view => {
         const activeViewId = shopPage ? "storeDashboard" : viewSelector.value;
         view.classList.toggle("view-active", view.id === activeViewId);
