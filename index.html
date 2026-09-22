@@ -532,44 +532,148 @@
 
     .leading-summary {
       display: grid;
-      grid-template-columns: repeat(4, minmax(220px, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
     #leadingIndicators {
-      margin-left: -48px;
-      margin-right: -48px;
+      max-width: 1280px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
-    .leading-table table {
-      min-width: 1840px;
+    #leadingIndicators .metric-card {
+      padding: 13px 14px;
+    }
+
+    #leadingIndicators .metric-label {
+      font-size: 14px;
+    }
+
+    #leadingIndicators .metric-value {
+      font-size: 30px;
+    }
+
+    #leadingIndicators .metric-note {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    #leadingIndicators .panel-title {
+      font-size: 20px;
+    }
+
+    #leadingIndicators .panel-note {
+      font-size: 14px;
+    }
+
+    #leadingIndicators .badge {
+      min-height: 28px;
+      padding: 4px 10px;
+      font-size: 14px;
     }
 
     .leading-task-tables {
       display: grid;
-      gap: 18px;
+      gap: 14px;
     }
 
-    .leading-table th:first-child,
-    .leading-table td:first-child {
-      min-width: 260px;
+    .leading-alert-list {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
     }
 
-    .leading-table th:nth-child(2),
-    .leading-table td:nth-child(2) {
-      min-width: 0;
+    .leading-alert-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2.1fr);
+      gap: 14px;
+      align-items: stretch;
+      border: 1px solid #f2c6c1;
+      border-radius: 8px;
+      background: #fff8f7;
+      padding: 12px;
     }
 
-    .leading-table td {
+    .leading-alert-main {
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      border-right: 1px solid #f2c6c1;
+      padding-right: 14px;
+    }
+
+    .leading-alert-shop {
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .leading-alert-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .leading-change-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      color: #9f1d14;
+      background: #ffe1dc;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
       white-space: nowrap;
+    }
+
+    .leading-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(130px, 1fr));
+      gap: 8px;
+    }
+
+    .leading-stat {
+      min-height: 66px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 8px 10px;
+    }
+
+    .leading-stat-label {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .leading-stat-value {
+      margin: 0;
+      color: var(--text);
+      font-size: 19px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .leading-stat-value-muted {
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 700;
     }
 
     .leading-note {
       color: var(--muted);
-      font-size: 22px;
-      line-height: 1.35;
-      padding: 0 18px 16px;
+      font-size: 14px;
+      line-height: 1.4;
+      padding: 0 14px 14px;
     }
 
     .trend-task-list {
@@ -917,6 +1021,21 @@
         margin-right: 0;
       }
 
+      .leading-alert-row {
+        grid-template-columns: 1fr;
+      }
+
+      .leading-alert-main {
+        border-right: 0;
+        border-bottom: 1px solid #f2c6c1;
+        padding-right: 0;
+        padding-bottom: 12px;
+      }
+
+      .leading-stats {
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+      }
+
       #taskHeatMap {
         width: auto;
         margin-left: 0;
@@ -944,6 +1063,10 @@
       }
 
       .all-shop-alert {
+        grid-template-columns: 1fr;
+      }
+
+      .leading-stats {
         grid-template-columns: 1fr;
       }
 
@@ -3056,20 +3179,41 @@
     function leadingTaskTableHtml(task, taskRows) {
       const flaggedCount = taskRows.filter(row => row.flag).length;
       const body = taskRows.map(row => `
-        <tr class="${row.flag ? "row-critical" : ""}">
-          <td>${row.shop}</td>
-          <td class="num">${formatNumber(Math.round(row.trailingAverage))}</td>
-          <td class="num">${row.weeklyStdDev.toFixed(1)}</td>
-          <td class="num">${formatNumber(Math.round(row.currentMonthAverage))}</td>
-          <td class="num ${row.change < 0 ? "trend-down" : "trend-up"}">${row.change.toFixed(1)}%</td>
-          <td class="num">${formatNumber(Math.round(row.monthOneProjection))}</td>
-          <td class="num">${formatNumber(Math.round(row.monthTwoProjection))}</td>
-          <td>${row.threshold.label}</td>
-          <td class="num">${formatNumber(row.daysSinceCall)}</td>
-          <td class="num">${formatNumber(row.historyWeekCount)}</td>
-          <td><span class="badge badge-${row.flag ? "red" : "ok"}">${row.flag ? "Y" : "N"}</span></td>
-          <td class="num">${formatNumber(row.backtestFlagCount)}</td>
-        </tr>
+        <div class="leading-alert-row">
+          <div class="leading-alert-main">
+            <div class="leading-alert-shop">${row.shop}</div>
+            <div class="leading-alert-meta">
+              <span class="leading-change-pill">${row.change.toFixed(1)}%</span>
+              <span class="badge badge-red">Flagged</span>
+            </div>
+          </div>
+          <div class="leading-stats">
+            <div class="leading-stat">
+              <p class="leading-stat-label">6mo avg</p>
+              <p class="leading-stat-value">${formatNumber(Math.round(row.trailingAverage))}</p>
+            </div>
+            <div class="leading-stat">
+              <p class="leading-stat-label">Current avg</p>
+              <p class="leading-stat-value">${formatNumber(Math.round(row.currentMonthAverage))}</p>
+            </div>
+            <div class="leading-stat">
+              <p class="leading-stat-label">Days since call</p>
+              <p class="leading-stat-value">${formatNumber(row.daysSinceCall)}</p>
+            </div>
+            <div class="leading-stat">
+              <p class="leading-stat-label">Next month</p>
+              <p class="leading-stat-value">${formatNumber(Math.round(row.monthOneProjection))}</p>
+            </div>
+            <div class="leading-stat">
+              <p class="leading-stat-label">Following month</p>
+              <p class="leading-stat-value">${formatNumber(Math.round(row.monthTwoProjection))}</p>
+            </div>
+            <div class="leading-stat">
+              <p class="leading-stat-label">Threshold</p>
+              <p class="leading-stat-value leading-stat-value-muted">${row.threshold.label}</p>
+            </div>
+          </div>
+        </div>
       `).join("");
 
       return `
@@ -3078,29 +3222,9 @@
             <h2 class="panel-title">${task}</h2>
             <span class="panel-note">${taskRows.length} shop${taskRows.length === 1 ? "" : "s"}; ${flaggedCount} flagged</span>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Shop</th>
-                  <th class="num">6mo Avg</th>
-                  <th class="num">Weekly Std Dev</th>
-                  <th class="num">Current Month Avg</th>
-                  <th class="num">% Change</th>
-                  <th class="num">Month+1 Projection</th>
-                  <th class="num">Month+2 Projection</th>
-                  <th>Threshold Used</th>
-                  <th class="num">Days Since Call</th>
-                  <th class="num">History Weeks</th>
-                  <th>Flag</th>
-                  <th class="num">Backtest Flag Count</th>
-                </tr>
-              </thead>
-              <tbody>${body}</tbody>
-            </table>
-          </div>
+          <div class="leading-alert-list">${body}</div>
           <div class="leading-note">
-            The 6mo average uses up to 26 trailing weeks and excludes any week overlapping the current partial month. If fewer than 26 history weeks are loaded, the table shows the available count. Backtest counts use available trailing data only; confirming true drops versus holidays or known events requires annotated historical context.
+            6mo average uses up to 26 trailing weeks and excludes the current partial month. Backtest counts use available trailing data only.
           </div>
         </article>
       `;
