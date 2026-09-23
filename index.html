@@ -895,6 +895,20 @@
       margin-left: calc((min(var(--page-max), 100vw) - 100vw) / 2 + 24px);
     }
 
+    body.heat-map-active .header-row,
+    body.heat-map-active .debug-line {
+      max-width: none;
+      padding-left: 56px;
+      padding-right: 56px;
+    }
+
+    body.heat-map-active .controls {
+      width: calc(100vw - 48px);
+      max-width: none;
+      margin-left: calc((min(var(--page-max), 100vw) - 100vw) / 2 + 24px);
+      margin-right: 0;
+    }
+
     .heat-map-table {
       min-width: 0;
       border-collapse: separate;
@@ -1054,6 +1068,15 @@
       #taskHeatMap {
         width: auto;
         margin-left: 0;
+      }
+
+      body.heat-map-active .header-row,
+      body.heat-map-active .debug-line,
+      body.heat-map-active .controls {
+        width: auto;
+        max-width: var(--page-max);
+        margin-left: 0;
+        margin-right: 0;
       }
     }
 
@@ -3427,6 +3450,7 @@
     function setActiveView() {
       const shopPage = isShopPage();
       document.body.classList.toggle("leading-indicators-active", !shopPage && viewSelector.value === "leadingIndicators");
+      document.body.classList.toggle("heat-map-active", !shopPage && viewSelector.value === "taskHeatMap");
       document.querySelectorAll(".view").forEach(view => {
         const activeViewId = shopPage ? "storeDashboard" : viewSelector.value;
         view.classList.toggle("view-active", view.id === activeViewId);
